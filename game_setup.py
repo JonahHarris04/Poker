@@ -1,5 +1,5 @@
 import arcade
-from card import Card
+from Card import Card
 import math
 
 SCREEN_WIDTH = 1024

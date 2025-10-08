@@ -1,5 +1,5 @@
 import random
-import card
+import Card
 class Deck:
     def __init__(self):
         suits = ["Hearts", "Diamonds", "Clubs", "Spades"]
@@ -9,11 +9,9 @@ class Deck:
     def shuffle(self):
         random.shuffle(self.cards)
         
-    def take_card_from_top(self):
-        if self.cards:
-            return self.cards.pop(0)
-        else:
-            return None
+    def deal(self, num=1):
+        dealt = [self.cards.pop() for _ in range(num)]
+        return dealt
             
     def __len__(self):
         return len(self.cards)
