@@ -30,3 +30,29 @@ def handle_set_name(data):
     game.add_player(name, uuid)
     print(f"Player joined: {name}")
 
+    # Notify all players of player list
+    emit('player_list', [p.name for p in game.players.values()], broadcast=True)
+
+
+# Start a new round
+@socketio.on('start_game')
+def handle_start_game(data):
+    if len(game.players) < 2:
+        emit('error', {'message': 'You must have at least 2 players!'})
+        return
+
+    game.start_round()
+    print("New round started")
+
+    # Send each player their hand
+    for player in game.players.values():
+        emit('hand', {'cards': [str(card) for card in player.hand]}, to=player.uuid)
+
+    # Notify current player it's their turn
+    current_player = game.current_player()
+    emit('your turn', {'message': "It's your turn!"}, to=current_player.uuid)
+
+
+
+
+
