@@ -10,10 +10,7 @@ socketio = SocketIO(app, cors_allowed_origins="*") # allow external connections
 # Single game instance
 game = PokerGame()
 
-
-
-"""Event Handlers"""
-
+# Event handlers
 
 # When someone connects
 @socketio.on('connect')
@@ -27,8 +24,10 @@ def handle_connect():
 def handle_set_name(data):
     name = data.get('name', 'Anonymous')
     uuid = request.sid
-    game.add_player(name, uuid)
-    print(f"Player joined: {name}")
+    game.add_player(name, uuid, seat_position=data.get('seat_position', 0), seat_position_flag=data.get('seat_position_flag', 0))
+
+    print(f"Added player: {name}, SID={uuid}")
+    print(f"Current players: {[p.name for p in game.players.values()]}")
 
     # Notify all players of player list
     emit('player_list', [p.name for p in game.players.values()], broadcast=True)
@@ -50,7 +49,11 @@ def handle_start_game(data):
 
     # Notify current player it's their turn
     current_player = game.current_player()
-    emit('your turn', {'message': "It's your turn!"}, to=current_player.uuid)
+    emit('your_turn', {'message': "It's your turn!"}, to=current_player.uuid)
+
+if __name__ == "__main__":
+    print("Starting poker server...")
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
 
 
 

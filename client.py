@@ -1,4 +1,6 @@
 import arcade
+import socketio
+import threading
 from Card import Card
 import math
 
@@ -46,7 +48,6 @@ SEAT_CLEARANCE = 35
 class pokerGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-        self.card_list = None
         self.background_color = arcade.color.CAL_POLY_GREEN
 
         self.table_center_x = SCREEN_WIDTH // 2
@@ -55,7 +56,62 @@ class pokerGame(arcade.Window):
         self.table_height = 500
         self.table_color = arcade.color.CAPUT_MORTUUM
 
+        # Card storage for each hand and the deck
+        self.hand_cards = arcade.SpriteList()
+        self.card_list = arcade.SpriteList()
+
+        # Networking
+        self.sio = socketio.Client()
+        self.server_url = "http://127.0.0.1:5000" # Change to servers IP when flask starts running
+
+        # GUI state
+        self.status_text = "Not Connected"
+        self.player_name = "Player 1"
+
     def setup(self):
+        self.register_socket_events()
+        threading.Thread(target=self.connect_to_server, daemon=True).start()
+
+    def register_socket_events(self):
+        # List of how the GUI will react to server events
+
+        @self.sio.event
+        def connect():
+            print("Connected to server.")
+            self.status_text = "Connected!"
+            self.sio.emit("set_name", {"player_name": self.player_name})
+
+        @self.sio.on("player_list")
+        def update_player_list(data):
+            print("Player list", data)
+            self.status_text = f"Players: {', '.join(data)}"
+
+        @self.sio.on("hand")
+        def receive_hand(data):
+            print("Received hand", data)
+            self.display_hand(data["cards"])
+
+        @self.sio.on("your_turn")
+        def your_turn(data):
+            print(data["message"])
+            self.status_text = data["message"]
+
+        @self.sio.on("error")
+        def on_error(data):
+            print("Error:", data)
+            self.status_text = f"Error: {data['message']}"
+
+
+    def connect_to_server(self):
+        # Connect to the SocketIO server
+        try:
+            self.sio.connect(self.server_url)
+        except Exception as e:
+            print("Connection failed:", e)
+            self.status_text = "Failed to connect."
+
+
+    def setup_card_deck(self):
 
         # 52 card sprite list
         self.card_list = arcade.SpriteList()
@@ -66,6 +122,7 @@ class pokerGame(arcade.Window):
                 card = Card(card_suit, card_value, CARD_SCALE)
                 card.position = START_X, BOTTOM_Y
                 self.card_list.append(card)
+
 
     def on_draw(self):
         # Render screen
@@ -85,14 +142,34 @@ class pokerGame(arcade.Window):
         # Render deck
         self.card_list.draw()
 
+        # Draw status
+        arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
+
+
+    def display_hand(self, cards):
+        # Display cards received from server
+        self.hand_cards = arcade.SpriteList()
+        start_x = SCREEN_WIDTH // 2 - (len(cards) * 50) // 2
+        y = 100
+        for i, card_str in enumerate(cards):
+            suit, value = card_str.split(" of ")
+            card = Card(suit, value, CARD_SCALE)
+            card.center_x = start_x + i * 100
+            card.center_y = y
+            self.hand_cards.append(card)
+
+
     def on_mouse_press(self, x, y, button, key_modifiers):
         pass
+
 
     def on_mouse_release(self, x: float, y: float, button: int, key_modifiers: int):
         pass
 
+
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
         pass
+
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
@@ -114,6 +191,13 @@ class pokerGame(arcade.Window):
             leg_dx = math.cos(theta) * -1
             leg_dy = math.sin(theta) * -1
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
+
+
+    def on_key_press(self, key, modifiers):
+        # Press 'S' tp start the game manually
+        if key == arcade.key.S:
+            print("Requesting to start game...")
+            self.sio.emit("start_game", {})
 
 
 def main():
