@@ -7,7 +7,7 @@ class Card(arcade.Sprite):
         self.value = value
 
         # face up card
-        self.image_file_name = f":resources:images/cards/card{self.suit}{self.value}.png"
+        self.image_file_name = f":resources:/images/cards/card{self.suit}{self.value}.png"
 
         # call parent
         super().__init__(self.image_file_name, scale, hit_box_algorithm="None")

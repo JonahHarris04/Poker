@@ -7,8 +7,8 @@ class PokerGame:
 
     def __init__(self):
         self.players = {}
-        self.deck = Deck
-        self.pot = Pot
+        self.deck = Deck.Deck()
+        self.pot = Pot.Pot()
         self.turn_order = [] # player uuids in turn order
         self.current_turn_index = 0
 

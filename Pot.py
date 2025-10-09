@@ -14,7 +14,7 @@ class Pot:
 
     def payout_split_pot(self, players):
         split_remainder = self.amount % len(players)
-        split_amount = self.amount / len(players)
+        split_amount = self.amount // len(players)
         if split_remainder == 0:
             for player in players:
                 player.receive_money(split_amount)

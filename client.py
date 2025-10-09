@@ -68,6 +68,10 @@ class pokerGame(arcade.Window):
         self.status_text = "Not Connected"
         self.player_name = "Player 1"
 
+        # Thread-safe queue for hands
+        self.incoming_hands = []
+        self.incoming_lock = threading.Lock()
+
     def setup(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
@@ -89,7 +93,9 @@ class pokerGame(arcade.Window):
         @self.sio.on("hand")
         def receive_hand(data):
             print("Received hand", data)
-            self.display_hand(data["cards"])
+            # Store in thread-safe queue
+            with self.incoming_lock:
+                self.incoming_hands.append(data["cards"])
 
         @self.sio.on("your_turn")
         def your_turn(data):
@@ -109,6 +115,14 @@ class pokerGame(arcade.Window):
         except Exception as e:
             print("Connection failed:", e)
             self.status_text = "Failed to connect."
+
+
+    def on_update(self, delta_time):
+        # Process hands received from server
+        with self.incoming_lock:
+            while self.incoming_hands:
+                cards = self.incoming_hands.pop(0)
+                self.display_hand(cards)
 
 
     def setup_card_deck(self):
@@ -142,6 +156,9 @@ class pokerGame(arcade.Window):
         # Render deck
         self.card_list.draw()
 
+        # Render hand
+        self.hand_cards.draw()
+
         # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
 
@@ -152,7 +169,7 @@ class pokerGame(arcade.Window):
         start_x = SCREEN_WIDTH // 2 - (len(cards) * 50) // 2
         y = 100
         for i, card_str in enumerate(cards):
-            suit, value = card_str.split(" of ")
+            value, _, suit = card_str.partition(" of ")
             card = Card(suit, value, CARD_SCALE)
             card.center_x = start_x + i * 100
             card.center_y = y
