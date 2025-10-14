@@ -2,7 +2,7 @@ import arcade
 import socketio
 import threading
 from Card import Card
-import math
+import math, time
 
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 768
@@ -189,19 +189,79 @@ class PokerGameClient(arcade.Window):
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
 
-# --------------------- DISPLAY CARDS
+    # Handles deal animations
+    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.0):
+        start_x, start_y = START_X, BOTTOM_Y
+        sprite.center_x, sprite.center_y = start_x, start_y
+
+        anim = {
+            "sprite": sprite,
+            "start_x": start_x,
+            "start_y": start_y,
+            "end_x": end_xy[0],
+            "end_y": end_xy[1],
+            "start_time": time.time() + delay,
+            "duration": duration,
+            "done": False,
+        }
+        self.deal_animations.append(anim)
+
+
+    def update_animations(self):
+        """Advance and apply any active deal animations. Call this from on_update()."""
+        now = time.time()
+        still_running = []
+
+        for anim in self.deal_animations:
+            # not started yet
+            if now < anim["start_time"]:
+                still_running.append(anim)
+                continue
+
+            # already finished
+            if anim.get("done"):
+                continue
+
+            elapsed = now - anim["start_time"]
+            dur = anim["duration"]
+            progress = min(1.0, elapsed / dur) if dur > 0 else 1.0
+
+            sx, sy = anim["start_x"], anim["start_y"]
+            ex, ey = anim["end_x"], anim["end_y"]
+
+            # Interpolate
+            anim["sprite"].center_x = sx + (ex - sx) * progress
+            anim["sprite"].center_y = sy + (ey - sy) * progress
+
+            if progress >= 1.0:
+                anim["done"] = True
+            else:
+                still_running.append(anim)
+
+        # keep only running animations
+        self.deal_animations = still_running
+
+
+    # --------------------- DISPLAY CARDS
 
     def display_hand(self, cards):
         # Display cards received from server
         self.hand_cards = arcade.SpriteList()
         start_x = SCREEN_WIDTH // 2 - (len(cards) * 50) // 2
         y = 100
+        deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # deck position (adjust as needed)
+
         for i, card_str in enumerate(cards):
             value, _, suit = card_str.partition(" of ")
             card = Card(suit, value, CARD_SCALE)
-            card.center_x = start_x + i * 100
-            card.center_y = y
+            card.center_x = deck_x
+            card.center_y = deck_y
+
             self.hand_cards.append(card)
+
+            # Animate the deal from the deck to the player's hand
+            end_pos = (start_x + i * 100, y)
+            self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
 
 
     def display_community_cards(self, cards):
@@ -210,12 +270,19 @@ class PokerGameClient(arcade.Window):
         gap = 18
         start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
         y = self.table_center_y
+        deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # deck origin point
+
         for i, card_str in enumerate(cards):
             value, _, suit = card_str.partition(" of ")
             card = Card(suit, value, CARD_SCALE)
-            card.center_x = start_x + i * (CARD_WIDTH + gap)
-            card.center_y = y
+            card.center_x = deck_x
+            card.center_y = deck_y
+
             self.community_cards.append(card)
+
+            # Animate from deck to community slot
+            end_pos = (start_x + i * (CARD_WIDTH + gap), y)
+            self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
 
 
 # --------------------- UPDATES ---------------------
@@ -232,6 +299,8 @@ class PokerGameClient(arcade.Window):
             while self.incoming_community_cards:
                 cards = self.incoming_community_cards.pop(0)
                 self.display_community_cards(cards)
+
+        self.update_animations()
 
 
 # --------------------- KEY EVENTS ---------------------

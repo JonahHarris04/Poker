@@ -41,6 +41,10 @@ def handle_set_name(data):
 # Start a new round
 @socketio.on('start_game')
 def handle_start_game(_):
+    if game.round_active:
+        emit('error', {'message': 'A round is already in progress!'})
+        return
+
     if len(game.players) < 2:
         emit('error', {'message': 'You must have at least 2 players!'})
         return
