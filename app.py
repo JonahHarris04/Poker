@@ -1,6 +1,5 @@
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
-import random
 
 from game import PokerGame
 
@@ -41,7 +40,7 @@ def handle_set_name(data):
 
 # Start a new round
 @socketio.on('start_game')
-def handle_start_game(data):
+def handle_start_game(_):
     if len(game.players) < 2:
         emit('error', {'message': 'You must have at least 2 players!'})
         return
@@ -56,6 +55,49 @@ def handle_start_game(data):
     # Notify current player it's their turn
     current_player = game.current_player()
     emit('your_turn', {'message': "It's your turn!"}, to=current_player.uuid)
+
+
+@socketio.on('request_flop')
+def handle_flop_request(_):
+    if not game.round_active:
+        emit('error', {'message': 'No active round.'})
+        return
+
+    if len(game.community_cards) > 0:
+        return  # Flop already dealt
+
+    game.deal_flop()
+    print("Flop dealt:", [str(c) for c in game.community_cards])
+    emit('community_update', {'cards': [str(c) for c in game.community_cards]}, broadcast=True)
+
+
+@socketio.on('request_turn')
+def handle_turn_request(_):
+    if len(game.community_cards) != 3:
+        emit('error', {'message': 'Flop must be dealt first.'})
+        return
+    game.deal_turn()
+    emit('community_update', {'cards': [str(c) for c in game.community_cards]}, broadcast=True)
+
+
+@socketio.on('request_river')
+def handle_river_request(_):
+    if len(game.community_cards) != 4:
+        emit('error', {'message': 'Turn must be dealt first.'})
+        return
+    game.deal_river()
+    emit('community_update', {'cards': [str(c) for c in game.community_cards]}, broadcast=True)
+
+
+@socketio.on('reset_round')
+def handle_reset_round(_):
+    game.reset_round()
+    print("Round has been reset.")
+
+    # Notify all clients to clear hands and community cards
+    for player in game.players.values():
+        emit('hand', {'cards': []}, to=player.uuid)
+    emit('community_update', {'cards': []}, broadcast=True)
 
 
 if __name__ == "__main__":

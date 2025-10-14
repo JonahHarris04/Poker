@@ -1,5 +1,5 @@
 # Adding comments for no limit texas hold-em poker rules
-import Deck, Player, Card, Pot
+import Deck, Player, Pot
 
 
 # 0) game, dealer, deck, pot, and each player is created
@@ -9,8 +9,10 @@ class PokerGame:
         self.players = {}
         self.deck = Deck.Deck()
         self.pot = Pot.Pot()
+        self.community_cards = []
         self.turn_order = [] # player uuids in turn order
         self.current_turn_index = 0
+        self.round_active = False
 
 
     # Add new player
@@ -31,6 +33,8 @@ class PokerGame:
         self.pot.clear_pot()
         self.turn_order = list(self.players.keys())
         self.current_turn_index = 0
+        self.round_active = True
+        self.community_cards = []
 
         # Deal 2 cards to each player
         for player in self.players.values():
@@ -48,5 +52,47 @@ class PokerGame:
         self.current_turn_index = (self.current_turn_index + 1) % len(self.turn_order)
         return self.current_player()
 
-# app.py will handle all the game logic in coherence with socketio just so y'all know
 
+    # Discard one card (standard before flop/turn/river)
+    def burn_card(self):
+        _ = self.deck.deal(1)
+
+
+    # Deal the flop (first three community cards)
+    def deal_flop(self):
+        if len(self.community_cards) > 0:
+            return  # Flop already dealt
+        self.burn_card()
+        self.community_cards.extend(self.deck.deal(3))
+
+
+    # Deal the turn (fourth community card).
+    def deal_turn(self):
+
+        if len(self.community_cards) != 3:
+            return  # Flop must be dealt first
+        self.burn_card()
+        self.community_cards.extend(self.deck.deal(1))
+
+
+    # Deal the river (fifth and final community card).
+    def deal_river(self):
+        if len(self.community_cards) != 4:
+            return  # Turn must be dealt first
+        self.burn_card()
+        self.community_cards.extend(self.deck.deal(1))
+
+
+    # End the round, clear states, and prepare for next hand.
+    def reset_round(self):
+        self.round_active = False
+        self.deck = Deck.Deck()
+        self.deck.shuffle()
+        self.pot.clear_pot()
+        self.community_cards.clear()
+        self.turn_order = list(self.players.keys())
+        self.current_turn_index = 0
+
+        # Reset each player
+        for player in self.players.values():
+            player.reset_for_round()

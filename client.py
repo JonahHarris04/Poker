@@ -3,8 +3,6 @@ import socketio
 import threading
 from Card import Card
 import math
-import random
-import time
 
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 768
@@ -49,7 +47,7 @@ SEAT_CLEARANCE = 35
 CARD_BACK_ASSET = ":resources:images/cards/cardBack_red2.png"
 
 
-class PokerGame(arcade.Window):
+class PokerGameClient(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
         self.background_color = arcade.color.CAL_POLY_GREEN
@@ -78,16 +76,19 @@ class PokerGame(arcade.Window):
 
         # GUI state
         self.status_text = "Not Connected"
-        self.player_name = "Player 1"
+        self.player_name = "Player"
 
-        # Thread-safe queue for hands
+        # Thread-safe queue for hands and community cards
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
+        self.incoming_community_cards = []
+        self.community_lock = threading.Lock()
+
 
     def setup(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
-        self.shuffled_deck()
+
 
     def register_socket_events(self):
         # List of how the GUI will react to server events
@@ -115,6 +116,11 @@ class PokerGame(arcade.Window):
             print(data["message"])
             self.status_text = data["message"]
 
+        @self.sio.on("community_update")
+        def update_community_cards(data):
+            with self.community_lock:
+                self.incoming_community_cards.append(data["cards"])
+
         @self.sio.on("error")
         def on_error(data):
             print("Error:", data)
@@ -130,47 +136,7 @@ class PokerGame(arcade.Window):
             self.status_text = "Failed to connect."
 
 
-    def on_update(self, delta_time):
-
-        # Animate active deals
-        self.update_deal_animations()
-
-        # Process hands received from server
-        with self.incoming_lock:
-            while self.incoming_hands:
-                cards = self.incoming_hands.pop(0)
-                self.display_hand(cards)
-
-    # Creates the deck for the game
-    def shuffled_deck(self):
-        # Model shuffled deck
-        self.deck = [(s, v) for s in CARD_SUITS for v in CARD_VALUES]
-        random.shuffle(self.deck)
-
-        # Clear any tabled cards and animations
-        self.hand_cards = arcade.SpriteList()
-        self.community_cards = arcade.SpriteList()
-        self.deal_animations = []
-
-        # Visual deck pile
-        self.deck_back_sprites = arcade.SpriteList()
-        deck_x = START_X
-        deck_y = BOTTOM_Y
-        pile_height = min(15, len(self.deck))
-
-        w = int(CARD_WIDTH)
-        h = int(CARD_HEIGHT)
-
-        for i in range(pile_height):
-            back = arcade.SpriteSolidColor(w, h, arcade.color.DARK_BLUE)
-            # layered pile
-            back.center_x = deck_x + i * 0.6
-            back.center_y = deck_y + i * 0.6
-            self.deck_back_sprites.append(back)
-
-    def setup_card_deck(self):
-        self.shuffled_deck()
-
+# --------------------- DRAWING ---------------------
 
     def on_draw(self):
         # Render screen
@@ -200,90 +166,6 @@ class PokerGame(arcade.Window):
         # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
 
-    def right_of_deck_slots(self, n, gap=30, start_gap=40):
-        # Spots for pre_flop() cards
-        base_x = START_X + int(CARD_WIDTH / 2) + start_gap + CARD_WIDTH / 2
-        y = BOTTOM_Y
-        slots = []
-        for i in range(n):
-            x = base_x + i * (CARD_WIDTH + gap)
-            slots.append((x, y))
-        return slots
-
-    def community_slots(self):
-        # Positions for dealt cards in the middle of table
-        total = 5
-        gap = 18
-        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
-        y = self.table_center_y
-        return [(start_x + i * (CARD_WIDTH + gap), y) for i in range(total)]
-
-    def display_hand(self, cards):
-        # Display cards received from server
-        self.hand_cards = arcade.SpriteList()
-        start_x = SCREEN_WIDTH // 2 - (len(cards) * 50) // 2
-        y = 100
-        for i, card_str in enumerate(cards):
-            value, _, suit = card_str.partition(" of ")
-            card = Card(suit, value, CARD_SCALE)
-            card.center_x = start_x + i * 100
-            card.center_y = y
-            self.hand_cards.append(card)
-
-
-    # Removes one card from the deck
-    def pop_deck_card(self):
-        if not self.deck:
-            return None
-        card_tuple = self.deck.pop()
-        # Remove one visual back
-        if len(self.deck_back_sprites) > 0:
-            self.deck_back_sprites.pop()
-        return card_tuple
-
-    # Burn a card
-    def burn(self):
-        _ = self.pop_deck_card()
-
-    def deal_flop(self):
-        if len(self.community_cards) > 0:
-            return
-        # Burn and turn
-        self.burn()
-        # define where cards will be placed on table
-        center_positions = self.community_slots()[:3]
-        for i in range(3):
-            card_tup = self.pop_deck_card()
-            if card_tup is None:
-                self.status_text = "Deck empty."
-                return
-            suit, value = card_tup
-            card = Card(suit, value, CARD_SCALE)
-            self.hand_cards.append(card)
-            # Actually deals the flop out
-            self.enqueue_deal(card, center_positions[i], duration=0.28, delay= i * 0.10)
-
-    def deal_turn(self):
-        if len(self.community_cards) != 3:
-            return
-
-    def deal_river(self):
-        if len(self.community_cards) != 4:
-            return
-
-
-
-    def on_mouse_press(self, x, y, button, key_modifiers):
-        pass
-
-
-    def on_mouse_release(self, x: float, y: float, button: int, key_modifiers: int):
-        pass
-
-
-    def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
-        pass
-
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
@@ -306,71 +188,78 @@ class PokerGame(arcade.Window):
             leg_dy = math.sin(theta) * -1
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
-    # Handles deal animations
-    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.0):
-        # Deal animation
-        start_xy = (START_X, BOTTOM_Y)
-        t0 = time.time() + delay
-        self.deal_animations.append({
-            "sprite": sprite,
-            "start": start_xy,
-            "end": end_xy,
-            "t0": t0,
-            "dur": duration
-        })
-        # Start at deck position
-        sprite.center_x, sprite.center_y = start_xy
 
-    # keeps track of ongoing deal animations
-    def update_deal_animations(self):
-        # List of active deal animations
-        now = time.time()
-        still_running = []
-        for anim in self.deal_animations:
-            t0 = anim["t0"]
-            dur = anim["dur"]
-            if now < t0:
-                still_running.append(anim)
-                continue
-            u = min(1.0, (now - t0) / dur)
-            sx, sy = anim["start"]
-            ex, ey = anim["end"]
-            x = sx + (ex - sx) * u
-            y = sy + (ey - sy) * u
-            anim["sprite"].center_x = x
-            anim["sprite"].center_y = y
-            if u < 1.0:
-                still_running.append(anim)
-        self.deal_animations = still_running
+# --------------------- DISPLAY CARDS
 
+    def display_hand(self, cards):
+        # Display cards received from server
+        self.hand_cards = arcade.SpriteList()
+        start_x = SCREEN_WIDTH // 2 - (len(cards) * 50) // 2
+        y = 100
+        for i, card_str in enumerate(cards):
+            value, _, suit = card_str.partition(" of ")
+            card = Card(suit, value, CARD_SCALE)
+            card.center_x = start_x + i * 100
+            card.center_y = y
+            self.hand_cards.append(card)
+
+
+    def display_community_cards(self, cards):
+        self.community_cards = arcade.SpriteList()
+        total = len(cards)
+        gap = 18
+        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
+        y = self.table_center_y
+        for i, card_str in enumerate(cards):
+            value, _, suit = card_str.partition(" of ")
+            card = Card(suit, value, CARD_SCALE)
+            card.center_x = start_x + i * (CARD_WIDTH + gap)
+            card.center_y = y
+            self.community_cards.append(card)
+
+
+# --------------------- UPDATES ---------------------
+
+    def on_update(self, delta_time):
+        # Process hands received from server
+        with self.incoming_lock:
+            while self.incoming_hands:
+                cards = self.incoming_hands.pop(0)
+                self.display_hand(cards)
+
+        # Process community cards
+        with self.community_lock:
+            while self.incoming_community_cards:
+                cards = self.incoming_community_cards.pop(0)
+                self.display_community_cards(cards)
+
+
+# --------------------- KEY EVENTS ---------------------
 
     def on_key_press(self, key, modifiers):
-        # Press 'S' tp start the game manually
         if key == arcade.key.S:
             print("Requesting to start game...")
             self.sio.emit("start_game", {})
 
-        # Local dealing (temporary)
-        if key == arcade.key.N:  # New deck (reset)
-            self.shuffled_deck()
-            self.status_text = "New shuffled deck."
-
         if key == arcade.key.F:
-            self.deal_flop()
-            self.status_text = "Flop dealt."
+            print("Requesting flop...")
+            self.sio.emit("request_flop", {})
 
-        # if key == arcade.key.T:
-        #     self.deal_turn()
-        #     self.status_text = "Turn dealt."
-        #
-        # if key == arcade.key.R:
-        #     self.deal_river()
-        #     self.status_text = "River dealt."
+        if key == arcade.key.T:
+            print("Requesting turn...")
+            self.sio.emit("request_turn", {})
 
+        if key == arcade.key.R:
+            print("Requesting river...")
+            self.sio.emit("request_river", {})
+
+        if key == arcade.key.N:  # Reset round
+            print("Requesting round reset...")
+            self.sio.emit("reset_round", {})
 
 
 def main():
-    window = PokerGame()
+    window = PokerGameClient()
     window.setup()
     arcade.run()
 
