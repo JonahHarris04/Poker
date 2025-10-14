@@ -45,7 +45,7 @@ STOOL_RING_THICKNESS = 3
 SEAT_CLEARANCE = 35
 
 
-class pokerGame(arcade.Window):
+class PokerGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
         self.background_color = arcade.color.CAL_POLY_GREEN
@@ -218,13 +218,11 @@ class pokerGame(arcade.Window):
 
 
 def main():
-    window = pokerGame()
+    window = PokerGame()
     window.setup()
     arcade.run()
 
 
 if __name__ == "__main__":
     main()
-
-
 

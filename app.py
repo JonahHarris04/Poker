@@ -51,6 +51,7 @@ def handle_start_game(data):
     current_player = game.current_player()
     emit('your_turn', {'message': "It's your turn!"}, to=current_player.uuid)
 
+
 if __name__ == "__main__":
     print("Starting poker server...")
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
