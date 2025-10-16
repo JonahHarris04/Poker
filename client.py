@@ -78,6 +78,9 @@ class PokerGameClient(arcade.Window):
         self.status_text = "Not Connected"
         self.player_name = "Player"
 
+        # Lobby
+        self.lobby = []
+
         # Thread-safe queue for hands and community cards
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
@@ -98,6 +101,13 @@ class PokerGameClient(arcade.Window):
             print("Connected to server.")
             self.status_text = "Connected!"
             self.sio.emit("set_name", {"player_name": self.player_name})
+
+        @self.sio.on("lobby_state")
+        def on_lobby_state(data):
+            self.lobby = data or []
+            names = [f"{p['name']}{' [x]' if p.get('ready') else ' [ ]'}" for p in self.lobby]
+            all_ready = (len(self.lobby) > 0) and all(p.get('ready') for p in self.lobby)
+            self.status_text = f"Lobby: {', '.join(names)} | All ready: {all_ready}"
 
         @self.sio.on("player_list")
         def update_player_list(data):
@@ -325,6 +335,10 @@ class PokerGameClient(arcade.Window):
         if key == arcade.key.N:  # Reset round
             print("Requesting round reset...")
             self.sio.emit("reset_round", {})
+
+        if key == arcade.key.RETURN:
+            print("Readied up")
+            self.sio.emit("ready", {"action": "toggle"})
 
 
 def main():

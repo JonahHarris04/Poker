@@ -16,14 +16,54 @@ class PokerGame:
 
 
     # Add new player
-    def add_player(self, name, uuid, seat_position, seat_position_flag):
-        self.players[uuid] = Player.Player(name, uuid, seat_position, seat_position_flag)
+    def add_player(self, name, uuid, seat_position, seat_position_flag, is_ready):
+        self.players[uuid] = Player.Player(name, uuid, seat_position, seat_position_flag, is_ready)
 
 
     # Remove player
     def remove_player(self, uuid):
         if uuid in self.players:
             del self.players[uuid]
+
+    #-----------------------------------Ready stuff--------------------------------
+
+    # Set a player's ready flag
+    def set_ready(self, uuid, is_ready: bool):
+        p = self.players.get(uuid)
+        if not p:
+            return None
+        p.ready = bool(is_ready)
+        return p.ready
+
+    # Toggle a player's ready flag
+    def toggle_ready(self, uuid):
+        p = self.players.get(uuid)
+        if not p:
+            return None
+        p.ready = not bool(getattr(p, 'ready', False))
+        return p.ready
+
+    # Set all player's ready flag to false
+    def clear_all_ready(self):
+        for p in self.players.values():
+            p.ready = False
+
+    # Return a boolean if all players are ready or not
+    def all_ready(self):
+        return len(self.players) > 0 and all(getattr(p, "ready", False) for p in self.players.values())
+
+    # Return lobby info in a list of dictionaries
+    def serialize_lobby(self):
+        out = []
+        for p in self.players.values():
+            out.append({
+                'uuid': p.uuid,
+                'name': p.name,
+                'ready': bool(getattr(p, 'ready', False)),
+                'seat_position': getattr(p, 'seat_position', 0),
+                'seat_position_flag': getattr(p, 'seat_position_flag', 0)
+            })
+        return out
 
 
     # Start a new round
@@ -96,3 +136,6 @@ class PokerGame:
         # Reset each player
         for player in self.players.values():
             player.reset_for_round()
+
+
+

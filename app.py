@@ -11,6 +11,11 @@ game = PokerGame()
 
 player_counter = 0
 
+# Helper
+def broadcast_lobby():
+    emit("lobby_state", game.serialize_lobby(), broadcast=True)
+
+
 # Event handlers
 
 # When someone connects
@@ -18,6 +23,7 @@ player_counter = 0
 def handle_connect():
     print(f"Player connected: {request.sid}")
     emit('connected', {'message': 'Connected to server!'})
+
 
 
 # When a player sets their name
@@ -29,13 +35,30 @@ def handle_set_name(data):
 
     #name = data.get('player_name', 'Anonymous')
     uuid = request.sid
-    game.add_player(name, uuid, seat_position=data.get('seat_position', 0), seat_position_flag=data.get('seat_position_flag', 0))
+    game.add_player(name, uuid, seat_position=data.get('seat_position', 0), seat_position_flag=data.get('seat_position_flag', 0), is_ready = False)
 
     print(f"Added player: {name}, SID={uuid}")
     print(f"Current players: {[p.name for p in game.players.values()]}")
 
     # Notify all players of player list
     emit('player_list', [p.name for p in game.players.values()], broadcast=True)
+
+
+@socketio.on('ready')
+def handle_ready(data):
+    uuid = request.sid
+    if data is None:
+        data = {}
+
+    action = data.get('action')
+    if action == 'toggle' or ('ready' not in data):
+        # Default: toggle if ready not explicitly provided
+        new_val = game.toggle_ready(uuid)
+    else:
+        new_val = game.set_ready(uuid, bool(data.get('ready', True)))
+
+    print(f"Player {uuid} ready set to {new_val}")
+    broadcast_lobby()
 
 
 # Start a new round
@@ -47,6 +70,10 @@ def handle_start_game(_):
 
     if len(game.players) < 2:
         emit('error', {'message': 'You must have at least 2 players!'})
+        return
+
+    if not game.all_ready():
+        emit('error', {'message': 'Everyone must be ready!'})
         return
 
     game.start_round()
