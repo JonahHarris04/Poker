@@ -9,6 +9,21 @@ class Player:
         self.folded = False
         self.current_bet = 0
 
+# returns a dictionary of the player data to pass around as json (cant pass regular python objects)
+# we should keep our eye on this to make sure that the dictionary is
+    # updated correctly (when we eventually access it in a more involved way)
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'uuid': self.uuid,
+            'money_count': self.money_count,
+            'seat_position': self.seat_position,
+            'hand': self.hand,
+            'seat_position_flag': self.seat_position_flag,
+            'folded': self.folded,
+            'current_bet': self.current_bet
+        }
+
     def receive_card(self, card):
         self.hand += card
 

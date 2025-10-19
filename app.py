@@ -35,7 +35,7 @@ def handle_set_name(data):
     print(f"Current players: {[p.name for p in game.players.values()]}")
 
     # Notify all players of player list
-    emit('player_list', [p.name for p in game.players.values()], broadcast=True)
+    emit('player_list', [player.to_dict() for player in game.players.values()], broadcast=True)
 
 
 # Start a new round
@@ -106,7 +106,8 @@ def handle_reset_round(_):
 
 if __name__ == "__main__":
     print("Starting poker server...")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+    # I have no idea what "allow_unsafe_werkzeug=True" is but for some reason it was necessary for me to run -Jake
 
 
 

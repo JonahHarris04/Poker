@@ -78,6 +78,9 @@ class PokerGameClient(arcade.Window):
         self.status_text = "Not Connected"
         self.player_name = "Player"
 
+        # Player list
+        self.player_list = []
+
         # Thread-safe queue for hands and community cards
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
@@ -101,8 +104,9 @@ class PokerGameClient(arcade.Window):
 
         @self.sio.on("player_list")
         def update_player_list(data):
-            print("Player list", data)
-            self.status_text = f"Players: {', '.join(data)}"
+            print("Player list", [p['name'] for p in data])
+            self.status_text = f"Players: {', '.join(p['name'] for p in data)}"
+            self.player_list = data
 
         @self.sio.on("hand")
         def receive_hand(data):
@@ -153,6 +157,9 @@ class PokerGameClient(arcade.Window):
         # Draw stools
         self.draw_stools_around_table()
 
+        # Draw players
+        self.draw_players_around_table()
+
         self.deck_back_sprites.draw()
 
         # # Render deck
@@ -166,6 +173,20 @@ class PokerGameClient(arcade.Window):
         # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
 
+    def draw_players_around_table(self):
+        cx, cy = self.table_center_x, self.table_center_y
+        rx = self.table_width / 2 + SEAT_CLEARANCE
+        ry = self.table_height / 2 + SEAT_CLEARANCE
+
+        for i, player in enumerate(self.player_list):
+            # if the client seat position is known, a simple offset can be done to render that player at the bottom
+            seat_position = 0   # placeholder (I think I need to talk with someone to better understand client.py)
+            theta = -2 * math.pi * (player['seat_position']+2+i - seat_position) / SEAT_COUNT
+
+            x = cx + rx * math.cos(theta)
+            y = cy + ry * math.sin(theta)
+            # Draw Player
+            arcade.draw_text(player["name"], x-30, y-50, arcade.color.WHITE, 16)    # positioning could use some work
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
