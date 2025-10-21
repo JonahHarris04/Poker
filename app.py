@@ -35,7 +35,8 @@ def handle_set_name(data):
 
     #name = data.get('player_name', 'Anonymous')
     uuid = request.sid
-    game.add_player(name, uuid, seat_position=data.get('seat_position', 0), seat_position_flag=data.get('seat_position_flag', 0), is_ready = False)
+    emit('set_seat_position', player_counter)
+    game.add_player(name, uuid, seat_position=data.get('seat_position', player_counter), seat_position_flag=data.get('seat_position_flag', 0), is_ready = False)
 
     print(f"Added player: {name}, SID={uuid}")
     print(f"Current players: {[p.name for p in game.players.values()]}")

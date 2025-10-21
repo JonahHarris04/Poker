@@ -78,6 +78,11 @@ class PokerGameClient(arcade.Window):
         self.status_text = "Not Connected"
         self.player_name = "Player"
 
+        self.seat_position = 0  # default 0
+
+        # Player list
+        self.player_list = []
+
         # Lobby
         self.lobby = []
 
@@ -112,7 +117,12 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("player_list")
         def update_player_list(data):
             print("Player list", data)
-            self.status_text = f"Players: {', '.join(data)}"
+            self.status_text = f"Players: {', '.join([player['name'] for player in data])}"
+            self.player_list = data
+
+        @self.sio.on("set_seat_position")
+        def set_seat_position(data):
+            self.seat_position = data
 
         @self.sio.on("hand")
         def receive_hand(data):
@@ -163,6 +173,9 @@ class PokerGameClient(arcade.Window):
         # Draw stools
         self.draw_stools_around_table()
 
+        # Draw players
+        self.draw_players_around_table()
+
         self.deck_back_sprites.draw()
 
         # # Render deck
@@ -176,6 +189,19 @@ class PokerGameClient(arcade.Window):
         # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
 
+    # render the player name at each stool with the client player localized to the bottom.
+    def draw_players_around_table(self):
+        cx, cy = self.table_center_x, self.table_center_y
+        rx = self.table_width / 2 + SEAT_CLEARANCE
+        ry = self.table_height / 2 + SEAT_CLEARANCE
+
+        for player in self.player_list:
+            theta = -2 * math.pi * (player['seat_position']+2 - self.seat_position) / SEAT_COUNT
+
+            x = cx + rx * math.cos(theta)
+            y = cy + ry * math.sin(theta)
+            # Draw Player
+            arcade.draw_text(player["name"], x-30, y-50, arcade.color.WHITE, 16)    # positioning could use some work
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
