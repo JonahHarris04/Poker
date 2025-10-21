@@ -52,16 +52,17 @@ class PokerGame:
     def all_ready(self):
         return len(self.players) > 0 and all(getattr(p, "ready", False) for p in self.players.values())
 
+
     # Return lobby info in a list of dictionaries
     def serialize_lobby(self):
         out = []
-        for p in self.players.values():
+        for player in self.players.values():
             out.append({
-                'uuid': p.uuid,
-                'name': p.name,
-                'ready': bool(getattr(p, 'ready', False)),
-                'seat_position': getattr(p, 'seat_position', 0),
-                'seat_position_flag': getattr(p, 'seat_position_flag', 0)
+                'uuid': player.uuid,
+                'name': player.name,
+                'ready': bool(getattr(player, 'ready', False)),
+                'seat_position': getattr(player, 'seat_position', 0),
+                'seat_position_flag': getattr(player, 'seat_position_flag', 0)
             })
         return out
 

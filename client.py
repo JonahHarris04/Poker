@@ -30,10 +30,6 @@ BOTTOM_Y = MAT_HEIGHT / 2 + MAT_HEIGHT * VERTICAL_MARGIN_PERCENT
 # The X of where to start putting things on the left side
 START_X = MAT_WIDTH / 2 + MAT_WIDTH * HORIZONTAL_MARGIN_PERCENT
 
-# Card constants
-CARD_VALUES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-CARD_SUITS = ["Clubs", "Hearts", "Spades", "Diamonds"]
-
 # Stools around table
 SEAT_COUNT = 8
 STOOL_RADIUS = 25
@@ -93,10 +89,21 @@ class PokerGameClient(arcade.Window):
         self.community_lock = threading.Lock()
 
 
-    def setup(self):
+    def run_window(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
 
+
+    def connect_to_server(self):
+        # Connect to the SocketIO server
+        try:
+            self.sio.connect(self.server_url)
+        except Exception as e:
+            print("Connection failed:", e)
+            self.status_text = "Failed to connect."
+
+
+    # --------------------- Socket events ---------------------
 
     def register_socket_events(self):
         # List of how the GUI will react to server events
@@ -108,10 +115,10 @@ class PokerGameClient(arcade.Window):
             self.sio.emit("set_name", {"player_name": self.player_name})
 
         @self.sio.on("lobby_state")
-        def on_lobby_state(data):
+        def update_lobby_state(data):
             self.lobby = data or []
-            names = [f"{p['name']}{' [x]' if p.get('ready') else ' [ ]'}" for p in self.lobby]
-            all_ready = (len(self.lobby) > 0) and all(p.get('ready') for p in self.lobby)
+            names = [f"{player['name']}{' [x]' if player.get('ready') else ' [ ]'}" for player in self.lobby]
+            all_ready = (len(self.lobby) > 0) and all(player.get('ready') for player in self.lobby)
             self.status_text = f"Lobby: {', '.join(names)} | All ready: {all_ready}"
 
         @self.sio.on("player_list")
@@ -145,15 +152,6 @@ class PokerGameClient(arcade.Window):
         def on_error(data):
             print("Error:", data)
             self.status_text = f"Error: {data['message']}"
-
-
-    def connect_to_server(self):
-        # Connect to the SocketIO server
-        try:
-            self.sio.connect(self.server_url)
-        except Exception as e:
-            print("Connection failed:", e)
-            self.status_text = "Failed to connect."
 
 
 # --------------------- DRAWING ---------------------
@@ -300,6 +298,7 @@ class PokerGameClient(arcade.Window):
             self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
 
 
+    # Card dealing animation
     def display_community_cards(self, cards):
         self.community_cards = arcade.SpriteList()
         total = len(cards)
@@ -369,7 +368,7 @@ class PokerGameClient(arcade.Window):
 
 def main():
     window = PokerGameClient()
-    window.setup()
+    window.run_window()
     arcade.run()
 
 
