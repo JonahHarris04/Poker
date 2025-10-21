@@ -46,6 +46,3 @@ class Player:
     @ready.setter
     def ready(self, value):
         self.is_ready = bool(value)
-
-
-

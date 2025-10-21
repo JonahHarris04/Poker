@@ -137,6 +137,3 @@ class PokerGame:
         # Reset each player
         for player in self.players.values():
             player.reset_for_round()
-
-
-
