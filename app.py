@@ -22,7 +22,7 @@ def broadcast_lobby():
 @socketio.on('connect')
 def handle_connect():
     print(f"Player connected: {request.sid}")
-    emit('connected', {'message': 'Connected to server!'})
+    emit('connected', 'Connected to server!')
 
 
 
@@ -35,7 +35,7 @@ def handle_set_name(data):
 
     #name = data.get('player_name', 'Anonymous')
     uuid = request.sid
-    emit('set_seat_position', player_counter)
+    emit('seat_position', player_counter)
     game.add_player(name, uuid, seat_position=data.get('seat_position', player_counter), seat_position_flag=data.get('seat_position_flag', 0), is_ready = False)
 
     print(f"Added player: {name}, SID={uuid}")
@@ -66,15 +66,15 @@ def handle_ready(data):
 @socketio.on('start_game')
 def handle_start_game(_):
     if game.round_active:
-        emit('error', {'message': 'A round is already in progress!'})
+        emit('error_message', 'A round is already in progress!')
         return
 
     if len(game.players) < 2:
-        emit('error', {'message': 'You must have at least 2 players!'})
+        emit('error_message', 'You must have at least 2 players!')
         return
 
     if not game.all_ready():
-        emit('error', {'message': 'Everyone must be ready!'})
+        emit('error_message', 'Everyone must be ready!')
         return
 
     game.start_round()
@@ -82,17 +82,17 @@ def handle_start_game(_):
 
     # Send each player their hand
     for player in game.players.values():
-        emit('hand', {'cards': [str(card) for card in player.hand]}, to=player.uuid)
+        emit('hand', [str(card) for card in player.hand], to=player.uuid)
 
     # Notify current player it's their turn
     current_player = game.current_player()
-    emit('your_turn', {'message': "It's your turn!"}, to=current_player.uuid)
+    emit('message', "It's your turn!", to=current_player.uuid)
 
 
 @socketio.on('request_flop')
 def handle_flop_request(_):
     if not game.round_active:
-        emit('error', {'message': 'No active round.'})
+        emit('error_message', 'No active round.')
         return
 
     if len(game.community_cards) > 0:
@@ -100,25 +100,25 @@ def handle_flop_request(_):
 
     game.deal_flop()
     print("Flop dealt:", [str(c) for c in game.community_cards])
-    emit('community_update', {'cards': [str(c) for c in game.community_cards]}, broadcast=True)
+    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
 
 
 @socketio.on('request_turn')
 def handle_turn_request(_):
     if len(game.community_cards) != 3:
-        emit('error', {'message': 'Flop must be dealt first.'})
+        emit('error_message', 'Flop must be dealt first.')
         return
     game.deal_turn()
-    emit('community_update', {'cards': [str(c) for c in game.community_cards]}, broadcast=True)
+    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
 
 
 @socketio.on('request_river')
 def handle_river_request(_):
     if len(game.community_cards) != 4:
-        emit('error', {'message': 'Turn must be dealt first.'})
+        emit('error_message', 'Turn must be dealt first.')
         return
     game.deal_river()
-    emit('community_update', {'cards': [str(c) for c in game.community_cards]}, broadcast=True)
+    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
 
 
 @socketio.on('reset_round')
@@ -128,8 +128,8 @@ def handle_reset_round(_):
 
     # Notify all clients to clear hands and community cards
     for player in game.players.values():
-        emit('hand', {'cards': []}, to=player.uuid)
-    emit('community_update', {'cards': []}, broadcast=True)
+        emit('hand', [], to=player.uuid)
+    emit('community_cards', [], broadcast=True)
 
 
 if __name__ == "__main__":
