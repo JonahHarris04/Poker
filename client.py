@@ -5,7 +5,7 @@ from Card import Card
 import math, time
 
 SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
+SCREEN_HEIGHT = 700
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
@@ -56,8 +56,10 @@ class PokerGameClient(arcade.Window):
 
         # Card storage for each hand and the deck
         self.hand_cards = arcade.SpriteList()
+        self.other_hands = {}
         self.community_cards = arcade.SpriteList()
-        # self.card_list = arcade.SpriteList()
+        # track if cards are dealt
+        self.cards_dealt = False
 
         # Deck variables
         self.deck = []
@@ -123,6 +125,7 @@ class PokerGameClient(arcade.Window):
             print("Player list", player_dictionaries)
             self.status_text = f"Players: {', '.join([player['name'] for player in player_dictionaries])}"
             self.player_list = player_dictionaries
+            
 
         @self.sio.on("seat_position")
         def update_seat_position(seat_position: int):
@@ -131,6 +134,7 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("hand")
         def update_hand(hand_cards: list):
             print("Received hand", hand_cards)
+            self.cards_dealt = True
             # Store in thread-safe queue
             with self.incoming_lock:
                 self.incoming_hands.append(hand_cards)
@@ -180,6 +184,10 @@ class PokerGameClient(arcade.Window):
         # Render deck
         self.community_cards.draw()
 
+        # Render facedown cards
+        for seat, hand in self.other_hands.items():
+            hand.draw()
+
         # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
 
@@ -197,6 +205,32 @@ class PokerGameClient(arcade.Window):
             # Draw Player
             arcade.draw_text(player["name"], x - 30, y - 50, arcade.color.WHITE, 16)  # positioning could use some work
             # arcade.draw_text(player["money_count"], x - 30, y - 70, arcade.color.WHITE, 16)
+
+    # helper function for update_player_list to draw facedown cards
+    def create_facedown_hand_for_player(self, seat_position):
+        # essentially a copy from draw_players_around_table
+        cx, cy = self.table_center_x, self.table_center_y
+        rx = self.table_width / 2.5
+        ry = self.table_height / 2.5
+
+        theta = -2 * math.pi * (seat_position + 2 - self.seat_position) / SEAT_COUNT
+        base_x = cx + rx * math.cos(theta)
+        base_y = cy + ry * math.sin(theta)
+        print(f"Facedown cards for seat {seat_position} at ({base_x}, {base_y})")
+
+        hand_sprites = arcade.SpriteList()
+
+        space_offset = 98
+
+        # for two facedown cards
+        for i in range(2):
+            card_back = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
+            card_back.center_x = base_x + i * space_offset
+            card_back.center_y = base_y
+            hand_sprites.append(card_back)
+            print(f"  Card {i}: position ({card_back.center_x}, {card_back.center_y})")
+        self.other_hands[seat_position] = hand_sprites
+        print(f"  Total other_hands: {len(self.other_hands)}")
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
@@ -315,6 +349,17 @@ class PokerGameClient(arcade.Window):
     # --------------------- UPDATES ---------------------
 
     def on_update(self, delta_time):
+        # Process facedown cards when player list changes
+        if self.cards_dealt:
+            current_seats = set(self.other_hands.keys())
+            expected_seats = {p['seat_position'] for p in self.player_list if p['seat_position'] != self.seat_position}
+            if current_seats != expected_seats:
+                self.other_hands.clear()
+                for player in self.player_list:
+                    seat = player['seat_position']
+                    if seat != self.seat_position:
+                        self.create_facedown_hand_for_player(seat)
+
         # Process hands received from server
         with self.incoming_lock:
             while self.incoming_hands:
