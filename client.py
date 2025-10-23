@@ -70,7 +70,7 @@ class PokerGameClient(arcade.Window):
 
         # Networking
         self.sio = socketio.Client()
-        self.server_url = "http://127.0.0.1:5000" # Change to servers IP when flask starts running
+        self.server_url = "http://127.0.0.1:5000"  # Change to servers IP when flask starts running
 
         # GUI state
         self.status_text = "Not Connected"
@@ -90,11 +90,9 @@ class PokerGameClient(arcade.Window):
         self.incoming_community_cards = []
         self.community_lock = threading.Lock()
 
-
     def run_window(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
-
 
     def connect_to_server(self):
         # Connect to the SocketIO server
@@ -103,7 +101,6 @@ class PokerGameClient(arcade.Window):
         except Exception as e:
             print("Connection failed:", e)
             self.status_text = "Failed to connect."
-
 
     # --------------------- Socket events ---------------------
 
@@ -117,47 +114,45 @@ class PokerGameClient(arcade.Window):
             self.sio.emit("set_name", {"player_name": self.player_name})
 
         @self.sio.on("lobby_state")
-        def update_lobby_state(data):
-            self.lobby = data or []
-            names = [f"{player['name']}{' [x]' if player.get('ready') else ' [ ]'}"
-                     for player in self.lobby]
+        def update_lobby_state(player_dictionaries: list):
+            self.lobby = player_dictionaries or []
+            names = [f"{player['name']}{' [x]' if player.get('ready') else ' [ ]'}" for player in self.lobby]
             all_ready = (len(self.lobby) > 0) and all(player.get('ready') for player in self.lobby)
             self.status_text = f"Lobby: {', '.join(names)} | All ready: {all_ready}"
 
         @self.sio.on("player_list")
-        def update_player_list(data):
-            print("Player list", data)
-            self.status_text = f"Players: {', '.join([player['name'] for player in data])}"
-            self.player_list = data
+        def update_player_list(player_dictionaries: list):
+            print("Player list", player_dictionaries)
+            self.status_text = f"Players: {', '.join([player['name'] for player in player_dictionaries])}"
+            self.player_list = player_dictionaries
 
-        @self.sio.on("set_seat_position")
-        def set_seat_position(data):
-            self.seat_position = data
+        @self.sio.on("seat_position")
+        def update_seat_position(seat_position: int):
+            self.seat_position = seat_position
 
         @self.sio.on("hand")
-        def receive_hand(data):
-            print("Received hand", data)
+        def update_hand(hand_cards: list):
+            print("Received hand", hand_cards)
             # Store in thread-safe queue
             with self.incoming_lock:
-                self.incoming_hands.append(data["cards"])
+                self.incoming_hands.append(hand_cards)
 
-        @self.sio.on("your_turn")
-        def your_turn(data):
-            print(data["message"])
-            self.status_text = data["message"]
-
-        @self.sio.on("community_update")
-        def update_community_cards(data):
+        @self.sio.on("community_cards")
+        def update_community_cards(cards: list):
             with self.community_lock:
-                self.incoming_community_cards.append(data["cards"])
+                self.incoming_community_cards.append(cards)
 
-        @self.sio.on("error")
-        def on_error(data):
-            print("Error:", data)
-            self.status_text = f"Error: {data['message']}"
+        @self.sio.on("message")
+        def post_message(message: str):
+            print(message)
+            self.status_text = message
 
+        @self.sio.on("error_message")
+        def post_error(message: str):
+            print("Error:", message)
+            self.status_text = f"Error: {message}"
 
-# --------------------- DRAWING ---------------------
+    # --------------------- DRAWING ---------------------
 
     def on_draw(self):
         # Render screen
@@ -197,13 +192,13 @@ class PokerGameClient(arcade.Window):
         ry = self.table_height / 2 + SEAT_CLEARANCE
 
         for player in self.player_list:
-            theta = -2 * math.pi * (player['seat_position']+2 - self.seat_position) / SEAT_COUNT
+            theta = -2 * math.pi * (player['seat_position'] + 2 - self.seat_position) / SEAT_COUNT
 
             x = cx + rx * math.cos(theta)
             y = cy + ry * math.sin(theta)
             # Draw Player
-            # positioning could use some work
-            arcade.draw_text(player["name"], x-30, y-50, arcade.color.WHITE, 16)
+            arcade.draw_text(player["name"], x - 30, y - 50, arcade.color.WHITE, 16)  # positioning could use some work
+            # arcade.draw_text(player["money_count"], x - 30, y - 70, arcade.color.WHITE, 16)
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
@@ -226,7 +221,6 @@ class PokerGameClient(arcade.Window):
             leg_dy = math.sin(theta) * -1
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
-
     # Handles deal animations
     def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.0):
         start_x, start_y = START_X, BOTTOM_Y
@@ -243,7 +237,6 @@ class PokerGameClient(arcade.Window):
             "done": False,
         }
         self.deal_animations.append(anim)
-
 
     def update_animations(self):
         """Advance and apply any active deal animations. Call this from on_update()."""
@@ -279,7 +272,6 @@ class PokerGameClient(arcade.Window):
         # keep only running animations
         self.deal_animations = still_running
 
-
     # --------------------- DISPLAY CARDS
 
     def display_hand(self, cards):
@@ -301,13 +293,12 @@ class PokerGameClient(arcade.Window):
             end_pos = (start_x + i * 100, y)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
 
-
     # Card dealing animation
     def display_community_cards(self, cards):
         self.community_cards = arcade.SpriteList()
         total = len(cards)
         gap = 18
-        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH /2
+        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
         y = self.table_center_y
         deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # deck origin point
 
@@ -323,8 +314,7 @@ class PokerGameClient(arcade.Window):
             end_pos = (start_x + i * (CARD_WIDTH + gap), y)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
 
-
-# --------------------- UPDATES ---------------------
+    # --------------------- UPDATES ---------------------
 
     def on_update(self, delta_time):
         # Process hands received from server
@@ -341,8 +331,7 @@ class PokerGameClient(arcade.Window):
 
         self.update_animations()
 
-
-# --------------------- KEY EVENTS ---------------------
+    # --------------------- KEY EVENTS ---------------------
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.S:
