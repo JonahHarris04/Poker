@@ -1,8 +1,10 @@
+import math
+import time
+import threading
 import arcade
 import socketio
-import threading
 from Card import Card
-import math, time
+
 
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 768
@@ -117,7 +119,8 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("lobby_state")
         def update_lobby_state(data):
             self.lobby = data or []
-            names = [f"{player['name']}{' [x]' if player.get('ready') else ' [ ]'}" for player in self.lobby]
+            names = [f"{player['name']}{' [x]' if player.get('ready') else ' [ ]'}"
+                     for player in self.lobby]
             all_ready = (len(self.lobby) > 0) and all(player.get('ready') for player in self.lobby)
             self.status_text = f"Lobby: {', '.join(names)} | All ready: {all_ready}"
 
@@ -199,7 +202,8 @@ class PokerGameClient(arcade.Window):
             x = cx + rx * math.cos(theta)
             y = cy + ry * math.sin(theta)
             # Draw Player
-            arcade.draw_text(player["name"], x-30, y-50, arcade.color.WHITE, 16)    # positioning could use some work
+            # positioning could use some work
+            arcade.draw_text(player["name"], x-30, y-50, arcade.color.WHITE, 16)
 
     def draw_stools_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
@@ -303,7 +307,7 @@ class PokerGameClient(arcade.Window):
         self.community_cards = arcade.SpriteList()
         total = len(cards)
         gap = 18
-        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
+        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH /2
         y = self.table_center_y
         deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # deck origin point
 

@@ -1,15 +1,22 @@
+"""
+CS 3050 Poker Game - app.py
+Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
+"""
+
+
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
 from game import PokerGame
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*") # allow external connections
+socketio = SocketIO(app, cors_allowed_origins="*")  # allow external connections
 
 # Single game instance
 game = PokerGame()
 
 player_counter = 0
+
 
 # Helper
 def broadcast_lobby():
@@ -25,18 +32,18 @@ def handle_connect():
     emit('connected', {'message': 'Connected to server!'})
 
 
-
 # When a player sets their name
 @socketio.on('set_name')
 def handle_set_name(data):
     global player_counter
-    player_counter += 1 # incrementing the counter each time a player joins
+    player_counter += 1  # incrementing the counter each time a player joins
     name = f"Player {player_counter}"
 
-    #name = data.get('player_name', 'Anonymous')
+    # name = data.get('player_name', 'Anonymous')
     uuid = request.sid
     emit('set_seat_position', player_counter)
-    game.add_player(name, uuid, seat_position=data.get('seat_position', player_counter), seat_position_flag=data.get('seat_position_flag', 0), is_ready = False)
+    game.add_player(name, uuid, seat_position=data.get('seat_position', player_counter),
+                    seat_position_flag=data.get('seat_position_flag', 0), is_ready=False)
 
     print(f"Added player: {name}, SID={uuid}")
     print(f"Current players: {[p.name for p in game.players.values()]}")
@@ -135,4 +142,3 @@ def handle_reset_round(_):
 if __name__ == "__main__":
     print("Starting poker server...")
     socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
-    # I have no idea what "allow_unsafe_werkzeug=True" is but for some reason it was necessary for me to run -Jake
