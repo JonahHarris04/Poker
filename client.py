@@ -67,6 +67,17 @@ class PokerGameClient(arcade.Window):
         self.deck = []
         self.deck_back_sprites = arcade.SpriteList()
 
+        # Make the deck visable
+        deck_sprite = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
+        deck_sprite.center_x = SCREEN_WIDTH / 2
+        deck_sprite.center_y = SCREEN_HEIGHT / 2 + 120  # match your deck_y offset
+        #self.deck_back_sprites.append(deck_sprite)
+        for i in range(10):
+            deck_sprite = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
+            deck_sprite.center_x = SCREEN_WIDTH / 2
+            deck_sprite.center_y = SCREEN_HEIGHT / 2 + 120 + i * 2  # small offset for thickness
+            self.deck_back_sprites.append(deck_sprite)
+
         # List for dealing animations
         self.deal_animations = []
 
@@ -222,15 +233,23 @@ class PokerGameClient(arcade.Window):
 
         hand_sprites = arcade.SpriteList()
 
-        space_offset = 98
+        space_offset = 28
 
         # for two facedown cards
         for i in range(2):
             card_back = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
             card_back.center_x = base_x + i * space_offset
             card_back.center_y = base_y
+            # offset top card's y - allows for more space on board
+            if i == 0:
+                card_back.center_y = base_y + 70
             hand_sprites.append(card_back)
+        
+            end_pos = (base_x + i * space_offset, base_y + i * 10)
+            self.enqueue_deal(card_back, end_pos, duration=0.25, delay=0.3)
+
             print(f"  Card {i}: position ({card_back.center_x}, {card_back.center_y})")
+
         self.other_hands[seat_position] = hand_sprites
         print(f"  Total other_hands: {len(self.other_hands)}")
 
@@ -256,8 +275,8 @@ class PokerGameClient(arcade.Window):
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
     # Handles deal animations
-    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.0):
-        start_x, start_y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120#START_X, BOTTOM_Y
+    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.3):
+        start_x, start_y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120
         sprite.center_x, sprite.center_y = start_x, start_y
 
         anim = {
@@ -325,14 +344,12 @@ class PokerGameClient(arcade.Window):
 
             # Animate the deal from the deck to the player's hand
             end_pos = (start_x + i * 100, y)
-            self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
+            self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
 
     # Card dealing animation
     def display_community_cards(self, cards):
-        self.community_cards = arcade.SpriteList()
         total = len(cards)
         gap = 18
-        start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
         y = self.table_center_y
         deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120 #deck origin point
 
@@ -342,12 +359,16 @@ class PokerGameClient(arcade.Window):
             card.center_x = deck_x
             card.center_y = deck_y
 
+            already_dealt = any(c.value + " of " + c.suit == card_str for c in self.community_cards)
+            if already_dealt:
+                continue
             self.community_cards.append(card)
 
-            # Animate from deck to community slot
-            end_pos = (start_x + i * (CARD_WIDTH + gap), y)
-            self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.1)
-
+            end_pos = (308 + i * (CARD_WIDTH + gap), y)
+            if i <= 2:
+                self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.3)
+            else:
+                self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
     # --------------------- UPDATES ---------------------
 
     def on_update(self, delta_time):
