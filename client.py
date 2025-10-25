@@ -257,7 +257,7 @@ class PokerGameClient(arcade.Window):
 
     # Handles deal animations
     def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.0):
-        start_x, start_y = START_X, BOTTOM_Y
+        start_x, start_y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120#START_X, BOTTOM_Y
         sprite.center_x, sprite.center_y = start_x, start_y
 
         anim = {
@@ -334,7 +334,7 @@ class PokerGameClient(arcade.Window):
         gap = 18
         start_x = self.table_center_x - (total * CARD_WIDTH + (total - 1) * gap) / 2 + CARD_WIDTH / 2
         y = self.table_center_y
-        deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # deck origin point
+        deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120 #deck origin point
 
         for i, card_str in enumerate(cards):
             value, _, suit = card_str.partition(" of ")
