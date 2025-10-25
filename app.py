@@ -18,9 +18,10 @@ game = PokerGame()
 player_counter = 0
 
 
-# Helper
-def broadcast_lobby():
-    emit("lobby_state", game.serialize_lobby(), broadcast=True)
+# Broadcast entire game state to all players
+def broadcast_game_state():
+    state = game.serialize_game_state()
+    socketio.emit("game_state", state, broadcast=True)
 
 
 # Event handlers
@@ -66,7 +67,7 @@ def handle_ready(data):
         new_val = game.set_ready(uuid, bool(data.get('ready', True)))
 
     print(f"Player {uuid} ready set to {new_val}")
-    broadcast_lobby()
+    broadcast_game_state()
 
 
 # Start a new round
@@ -94,6 +95,41 @@ def handle_start_game(_):
     # Notify current player it's their turn
     current_player = game.current_player()
     emit('message', "It's your turn!", to=current_player.uuid)
+
+
+@socketio.on('player_action')
+def handle_action(data):
+    uuid = request.sid
+    action = data.get('action')
+    amount = int(data.get('amount', 0))
+
+    if not game.round_active:
+        emit('error_message', 'No active round.')
+        return
+
+    # Apply the action in game logic
+    success, message = game.apply_action(uuid, action, amount)
+    if not success:
+        emit('error_message', message, to=uuid)
+        return
+
+    # Broadcast game state to all players
+    emit('game_state', game.serialize_game_state(), broadcast=True)
+
+    # Check if betting round is complete
+    if game.is_betting_round_complete():
+        progress_betting_round()
+
+
+def progress_betting_round():
+    # Move to next street if not showdown
+    if game.street != "showdown":
+        game.move_to_next_street()
+        emit('game_state', game.serialize_game_state(), broadcast=True)
+    else:
+        # Placeholder for winner evaluation
+        emit('message', "Round over! Showdown now.", broadcast=True)
+        # Here you could call evaluate_winner() once implemented
 
 
 @socketio.on('request_flop')

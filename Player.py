@@ -30,6 +30,7 @@ class Player:
 
     def make_bet(self, current_bet):
         self.money_count -= current_bet
+        self.current_bet += current_bet
 
     def receive_money(self, current_bet):
         self.money_count += current_bet

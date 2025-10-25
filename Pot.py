@@ -13,13 +13,17 @@ class Pot:
         self.clear_pot()
 
     def payout_split_pot(self, players):
-        split_remainder = self.amount % len(players)
+        if len(players) == 0:
+            return
+
         split_amount = self.amount // len(players)
-        if split_remainder == 0:
-            for player in players:
-                player.receive_money(split_amount)
-            self.clear_pot()
-        else:
-            for player in players:
-                player.receive_money(split_amount)
-            self.amount = split_remainder
+        remainder = self.amount % len(players)
+
+        for player in players:
+            player.receive_money(split_amount)
+
+        # Remainder goes to earliest in turn order (standard poker)
+        if remainder > 0:
+            players[0].receive_money(remainder)
+
+        self.clear_pot()
