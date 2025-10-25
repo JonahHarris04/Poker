@@ -5,7 +5,6 @@ import arcade
 import socketio
 from Card import Card
 
-
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 700
 SCREEN_TITLE = "Poker"
@@ -71,7 +70,7 @@ class PokerGameClient(arcade.Window):
         deck_sprite = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
         deck_sprite.center_x = SCREEN_WIDTH / 2
         deck_sprite.center_y = SCREEN_HEIGHT / 2 + 120  # match your deck_y offset
-        #self.deck_back_sprites.append(deck_sprite)
+        # self.deck_back_sprites.append(deck_sprite)
         for i in range(10):
             deck_sprite = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
             deck_sprite.center_x = SCREEN_WIDTH / 2
@@ -138,7 +137,6 @@ class PokerGameClient(arcade.Window):
             print("Player list", player_dictionaries)
             self.status_text = f"Players: {', '.join([player['name'] for player in player_dictionaries])}"
             self.player_list = player_dictionaries
-            
 
         @self.sio.on("seat_position")
         def update_seat_position(seat_position: int):
@@ -244,7 +242,7 @@ class PokerGameClient(arcade.Window):
             if i == 0:
                 card_back.center_y = base_y + 70
             hand_sprites.append(card_back)
-        
+
             end_pos = (base_x + i * space_offset, base_y + i * 10)
             self.enqueue_deal(card_back, end_pos, duration=0.25, delay=0.3)
 
@@ -369,6 +367,7 @@ class PokerGameClient(arcade.Window):
                 self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.3)
             else:
                 self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
+
     # --------------------- UPDATES ---------------------
 
     def on_update(self, delta_time):
