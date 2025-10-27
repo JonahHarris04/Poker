@@ -1,8 +1,12 @@
 import arcade
+import game
 import socketio
 import threading
 from Card import Card
 import math, time
+import arcade.gui as gui
+from game import PokerGame
+from enum import Enum
 
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 768
@@ -46,6 +50,14 @@ SEAT_CLEARANCE = 35
 
 CARD_BACK_ASSET = ":resources:images/cards/cardBack_red2.png"
 
+game = PokerGame()
+
+# Used to manage game states
+class Phase(Enum):
+    # show ready/start buttons
+    LOBBY = 0
+    # show betting buttons
+    IN_HAND = 1
 
 class PokerGameClient(arcade.Window):
     def __init__(self):
@@ -85,6 +97,9 @@ class PokerGameClient(arcade.Window):
 
         # Lobby
         self.lobby = []
+        self.all_ready = False
+        self.my_uuid = None
+        self.is_ready = False
 
         # Thread-safe queue for hands and community cards
         self.incoming_hands = []
@@ -92,11 +107,167 @@ class PokerGameClient(arcade.Window):
         self.incoming_community_cards = []
         self.community_lock = threading.Lock()
 
+        # UI manager for buttons
+        self.ui = gui.UIManager()
+        self.ready_button = None
+        self.start_button = None
+        self.bet_button = None
+        self.fold_button = None
+        self.check_button = None
+        self.raise_button = None
+        self.call_button = None
+
+        # Where the buttons are kept
+        self.anchor = None
+        self.start_box = None
+        self.action_row = None
+        self.left_column = None
+        self.right_column = None
+
+
+        # Phase always intialized at lobby
+        self.phase = Phase.LOBBY
+
 
     def setup(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
+        self.setup_ui()
 
+#-------------------------UI----------------------------------
+    def setup_ui(self):
+        self.ui.enable()
+        self.anchor = gui.UIAnchorLayout()
+        self.ui.add(self.anchor)
+
+        # Simple vertical layout at bottom-right
+        # Start box for ready and start buttons
+        self.start_box= gui.UIBoxLayout(space_between=10)
+
+        # Ready buttons
+        self.ready_button = gui.UIFlatButton(text="Ready", width=160)
+        self.start_button = gui.UIFlatButton(text="Start Game", width=160)
+
+
+        @self.ready_button.event("on_click")
+        def _on_ready_click(event):
+            # Toggle ready on the server
+            # Server broadcasts lobby_state back
+            self.sio.emit("ready", {"action": "toggle"})
+
+        @self.start_button.event("on_click")
+        def _on_start_click(event):
+            # Client-side guard
+            if self.all_ready and len(self.lobby) >= 2:
+                self.sio.emit("start_game", {})
+            else:
+                self.status_text = "Waiting for everyone to be ready..."
+
+        # Add start buttons to UI layout
+        self.start_box.add(self.ready_button)
+        self.start_box.add(self.start_button)
+
+
+        # Ready Buttons anchored in bottom right
+        self.ui.add(
+            self.anchor.add(
+                anchor_x = "right",
+                anchor_y = "bottom",
+                align_x = -10,
+                align_y = 10,
+                child = self.start_box,
+            )
+        )
+
+        # Box that will hold all action buttons
+        self.action_row = gui.UIBoxLayout(vertical = False, space_between=20)
+
+        # Left column buttons
+        self.left_column = gui.UIBoxLayout(space_between=8)
+        self.check_button = gui.UIFlatButton(text="Check", width=140)
+        self.fold_button = gui.UIFlatButton(text="Fold", width=140)
+
+        @self.check_button.event("on_click")
+        def _on_check_click(event):
+            self.sio.emit("check", {})
+
+        @self.fold_button.event("on_click")
+        def _on_fold_click(event):
+            self.sio.emit("fold", {})
+
+        self.left_column.add(self.check_button)
+        self.left_column.add(self.fold_button)
+
+        # Right column buttons
+        self.right_column = gui.UIBoxLayout(space_between=8)
+        self.bet_button = gui.UIFlatButton(text="Bet", width=140)
+        self.raise_button = gui.UIFlatButton(text="Raise", width=140)
+        self.call_button = gui.UIFlatButton(text="Call", width=140)
+
+
+        @self.bet_button.event("on_click")
+        def _on_bet_click(event):
+            self.sio.emit("bet", {"amount": 0})
+
+        @self.raise_button.event("on_click")
+        def _on_raise_click(event):
+            self.sio.emit("raise", {"amount": 0})
+
+        @self.call_button.event("on_click")
+        def _on_call_click(event):
+            self.sio.emit("call", {})
+
+        self.right_column.add(self.bet_button)
+        self.right_column.add(self.call_button)
+        self.right_column.add(self.raise_button)
+
+        self.action_row.add(self.left_column)
+        self.action_row.add(self.right_column)
+
+        self.ui.add(
+            self.anchor.add(
+                anchor_x = "right",
+                anchor_y = "bottom",
+                align_x = -10,
+                align_y = 10,
+                child = self.action_row,
+            )
+        )
+
+        self.apply_phase(Phase.LOBBY)
+
+
+    def set_group_visible(self, container: gui.UIBoxLayout, visible: bool):
+        # arcade.gui respects .visible on widgets; keep enabled in sync
+        container.visible = visible
+        for child in container.children:
+            try:
+                child.visible = visible
+                child.enabled = visible
+            except Exception:
+                pass
+
+    # Depending on the state of phase either the start buttons
+    # or the action buttons will show
+    def apply_phase(self, phase: Phase):
+        self.phase = phase
+        if phase == Phase.LOBBY:
+            self.set_group_visible(self.start_box, True)
+            self.set_group_visible(self.action_row, False)
+        elif phase == Phase.IN_HAND:
+            self.set_group_visible(self.start_box, False)
+            self.set_group_visible(self.action_row, True)
+        self.update_buttons()
+
+    def update_buttons(self):
+        # Set ready button label based on our current ready state
+        self.ready_button.text = "Unready" if self.is_ready else "Ready"
+
+        # Enable Start only if all ready & at least 2 players
+        self.start_button.disabled = not (self.all_ready and len(self.lobby) >= 2)
+
+
+    #---------------------SOCKET----------------------------
 
     def register_socket_events(self):
         # List of how the GUI will react to server events
@@ -110,9 +281,11 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("lobby_state")
         def on_lobby_state(data):
             self.lobby = data or []
+            self.all_ready = (len(self.lobby) > 0) and all(p.get('ready') for p in self.lobby)
             names = [f"{p['name']}{' [x]' if p.get('ready') else ' [ ]'}" for p in self.lobby]
-            all_ready = (len(self.lobby) > 0) and all(p.get('ready') for p in self.lobby)
-            self.status_text = f"Lobby: {', '.join(names)} | All ready: {all_ready}"
+            self.status_text = f"Lobby: {', '.join(names)} | All ready: {self.all_ready}"
+
+            self.update_buttons()
 
         @self.sio.on("player_list")
         def update_player_list(data):
@@ -123,6 +296,16 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("set_seat_position")
         def set_seat_position(data):
             self.seat_position = data
+
+        # takes the broadcast from app in handle_start_game()
+        @self.sio.on("round_started")
+        def on_round_started(_data):
+            self.apply_phase(Phase.IN_HAND)
+
+        # takes the broadcast from app in handle_reset_round()
+        @self.sio.on("round_reset")
+        def on_round_reset(_data):
+            self.apply_phase(Phase.LOBBY)
 
         @self.sio.on("hand")
         def receive_hand(data):
@@ -189,6 +372,8 @@ class PokerGameClient(arcade.Window):
         # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
 
+        self.ui.draw()
+
     # render the player name at each stool with the client player localized to the bottom.
     def draw_players_around_table(self):
         cx, cy = self.table_center_x, self.table_center_y
@@ -224,6 +409,8 @@ class PokerGameClient(arcade.Window):
             leg_dy = math.sin(theta) * -1
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
+
+    #------------------------Animations----------------------------
 
     # Handles deal animations
     def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.0):

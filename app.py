@@ -22,7 +22,7 @@ def broadcast_lobby():
 @socketio.on('connect')
 def handle_connect():
     print(f"Player connected: {request.sid}")
-    emit('connected', {'message': 'Connected to server!'})
+    emit('connected', {'message': 'Connected to server!', 'uuid': request.sid})
 
 
 
@@ -79,6 +79,9 @@ def handle_start_game(_):
 
     game.start_round()
     print("New round started")
+    # Added for telling client when to get rid of start buttons
+    # And to show the betting buttons
+    emit('round_started', {'active': True}, broadcast=True)
 
     # Send each player their hand
     for player in game.players.values():
@@ -131,7 +134,8 @@ def handle_reset_round(_):
         emit('hand', {'cards': []}, to=player.uuid)
     emit('community_update', {'cards': []}, broadcast=True)
 
-
+    # Tells client when a round is reset so it puts the start buttons back
+    emit('round_reset', {'active': False}, broadcast=True)
 if __name__ == "__main__":
     print("Starting poker server...")
     socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
