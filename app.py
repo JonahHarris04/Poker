@@ -125,7 +125,7 @@ def handle_start_game(_):
 
     # Notify current player it's their turn
     current_player = game.current_player()
-    emit('your_turn', "It's your turn!", to=current_player.uuid)
+    emit('message', "It's your turn!", to=current_player.uuid)
 
 
 @socketio.on('player_action')
@@ -145,7 +145,7 @@ def handle_action(data):
         return
 
     # Broadcast game state to all players
-    emit('game_state', game.serialize_game_state(), broadcast=True)
+    emit('message', message, broadcast=True)
 
     # Check if betting round is complete
     if game.is_betting_round_complete():

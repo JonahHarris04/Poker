@@ -267,8 +267,13 @@ class PokerGameClient(arcade.Window):
             with self.community_lock:
                 self.incoming_community_cards.append(cards)
 
-        @self.sio.on("error")
-        def on_error(data):
+        @self.sio.on("message")
+        def post_message(message: str):
+            print(message)
+            self.status_text = message
+
+        @self.sio.on("error_message")
+        def post_error(data):
             self.status_text = f"Error: {data['message']}"
 
     def connect_to_server(self):
