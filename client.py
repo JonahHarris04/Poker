@@ -238,7 +238,7 @@ class PokerGameClient(arcade.Window):
             self.status_text = f"Players: {', '.join([player['name'] for player in player_dictionaries])}"
             self.player_list = player_dictionaries
 
-        @self.sio.on("set_seat_position")
+        @self.sio.on("seat_position")
         def set_seat_position(seat_position: int):
             self.seat_position = seat_position
 

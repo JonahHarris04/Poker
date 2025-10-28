@@ -125,7 +125,7 @@ def handle_start_game(_):
 
     # Notify current player it's their turn
     current_player = game.current_player()
-    emit('message', "It's your turn!", to=current_player.uuid)
+    emit('your_turn', "It's your turn!", to=current_player.uuid)
 
 
 @socketio.on('player_action')
