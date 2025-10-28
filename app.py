@@ -21,7 +21,29 @@ player_counter = 0
 # Broadcast entire game state to all players
 def broadcast_game_state():
     state = game.serialize_game_state()
-    socketio.emit("game_state", state, broadcast=True)
+    emit("game_state", state)
+
+
+def deal_next_street(game_):
+    # Flop → 3 cards
+    if len(game_.community_cards) == 0:
+        game_.deal_community_cards(3)
+
+    # Turn → 1 more card
+    elif len(game_.community_cards) == 3:
+        game_.deal_community_cards(1)
+
+    # River → 1 more card
+    elif len(game_.community_cards) == 4:
+        game_.deal_community_cards(1)
+
+    else:
+        return  # All streets dealt
+
+    # Notify clients
+    emit("community_update", {
+        "cards": [str(card) for card in game_.community_cards]
+    })
 
 
 # Event handlers
@@ -67,7 +89,14 @@ def handle_ready(data):
         new_val = game.set_ready(uuid, bool(data.get('ready', True)))
 
     print(f"Player {uuid} ready set to {new_val}")
-    broadcast_game_state()
+    # Broadcast updated player list AND ready state
+    lobby_state = [{
+        "uuid": p.uuid,
+        "name": p.name,
+        "ready": getattr(p, "ready", False)
+    } for p in game.players.values()]
+
+    emit("lobby_state", lobby_state, broadcast=True)
 
 
 # Start a new round
@@ -87,6 +116,8 @@ def handle_start_game(_):
 
     game.start_round()
     print("New round started")
+
+    emit('round_started', {}, broadcast=True)
 
     # Send each player their hand
     for player in game.players.values():
@@ -119,17 +150,31 @@ def handle_action(data):
     # Check if betting round is complete
     if game.is_betting_round_complete():
         progress_betting_round()
+    else:
+        # Move to next active player
+        next_player = game.advance_turn()
+        if next_player:
+            emit('your_turn', {"message": "It's your turn!"}, to=next_player.uuid)
 
 
 def progress_betting_round():
-    # Move to next street if not showdown
+    # Automatically move to next street or showdown
     if game.street != "showdown":
         game.move_to_next_street()
+        # Send newly dealt community cards only (keeps same behavior as before)
+        emit('community_update', {"cards": [str(c) for c in game.community_cards]}, broadcast=True)
+
+        # Notify first active player in new street
+        current_player = game.current_player()
+        emit('your_turn', {"message": "It's your turn!"}, to=current_player.uuid)
+
+        # Broadcast updated game state
         emit('game_state', game.serialize_game_state(), broadcast=True)
     else:
-        # Placeholder for winner evaluation
+        # Showdown logic (placeholder)
         emit('message', "Round over! Showdown now.", broadcast=True)
-        # Here you could call evaluate_winner() once implemented
+        emit('game_state', game.serialize_game_state(), broadcast=True)
+
 
 
 @socketio.on('request_flop')
@@ -143,7 +188,9 @@ def handle_flop_request(_):
 
     game.deal_flop()
     print("Flop dealt:", [str(c) for c in game.community_cards])
-    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+    emit("community_update", {
+        "cards": [str(card) for card in game.community_cards]
+    })
 
 
 @socketio.on('request_turn')
@@ -152,7 +199,9 @@ def handle_turn_request(_):
         emit('error_message', 'Flop must be dealt first.')
         return
     game.deal_turn()
-    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+    emit("community_update", {
+        "cards": [str(card) for card in game.community_cards]
+    })
 
 
 @socketio.on('request_river')
@@ -161,7 +210,9 @@ def handle_river_request(_):
         emit('error_message', 'Turn must be dealt first.')
         return
     game.deal_river()
-    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+    emit("community_update", {
+        "cards": [str(card) for card in game.community_cards]
+    })
 
 
 @socketio.on('reset_round')
@@ -172,7 +223,7 @@ def handle_reset_round(_):
     # Notify all clients to clear hands and community cards
     for player in game.players.values():
         emit('hand', [], to=player.uuid)
-    emit('community_cards', [], broadcast=True)
+    emit('community_update', [], broadcast=True)
 
 
 if __name__ == "__main__":

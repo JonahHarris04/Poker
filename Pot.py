@@ -2,7 +2,7 @@ class Pot:
     def __init__(self):
         self.amount = 0
 
-    def take_bet(self, bet_amount):
+    def add_to_pot(self, bet_amount):
         self.amount += bet_amount
 
     def clear_pot(self):

@@ -1,49 +1,43 @@
-import math
-import time
-import threading
 import arcade
 import socketio
+import threading
+import math
+import time
+import arcade.gui as gui
 from Card import Card
-
+from game import PokerGame
+from enum import Enum
 
 SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 700
+SCREEN_HEIGHT = 768
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
 CARD_SCALE = 0.6
-
-# Size of the cards
 CARD_WIDTH = 140 * CARD_SCALE
 CARD_HEIGHT = 190 * CARD_SCALE
 
-# Size of the mat
 MAT_PERCENT_OVERSIZE = 1.25
 MAT_HEIGHT = int(CARD_HEIGHT * MAT_PERCENT_OVERSIZE)
 MAT_WIDTH = int(CARD_WIDTH * MAT_PERCENT_OVERSIZE)
 
-# Space between card mats
-VERTICAL_MARGIN_PERCENT = 0.10
-HORIZONTAL_MARGIN_PERCENT = 0.10
+BOTTOM_Y = MAT_HEIGHT / 2 + MAT_HEIGHT * 0.10
+START_X = MAT_WIDTH / 2 + MAT_WIDTH * 0.10
 
-# The Y of the bottom row (2 piles)
-BOTTOM_Y = MAT_HEIGHT / 2 + MAT_HEIGHT * VERTICAL_MARGIN_PERCENT
-
-# The X of where to start putting things on the left side
-START_X = MAT_WIDTH / 2 + MAT_WIDTH * HORIZONTAL_MARGIN_PERCENT
-
-# Stools around table
 SEAT_COUNT = 8
 STOOL_RADIUS = 25
 STOOL_COLOR = arcade.color.SADDLE_BROWN
 STOOL_RING_COLOR = arcade.color.BEIGE
 STOOL_RING_THICKNESS = 3
-
-# How far outside the table edge to place the stool centers.
 SEAT_CLEARANCE = 35
 
 CARD_BACK_ASSET = ":resources:images/cards/cardBack_red2.png"
 
+game = PokerGame()
+
+class Phase(Enum):
+    LOBBY = 0
+    IN_HAND = 1
 
 class PokerGameClient(arcade.Window):
     def __init__(self):
@@ -71,7 +65,7 @@ class PokerGameClient(arcade.Window):
         deck_sprite = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
         deck_sprite.center_x = SCREEN_WIDTH / 2
         deck_sprite.center_y = SCREEN_HEIGHT / 2 + 120  # match your deck_y offset
-        #self.deck_back_sprites.append(deck_sprite)
+        # self.deck_back_sprites.append(deck_sprite)
         for i in range(10):
             deck_sprite = arcade.Sprite(CARD_BACK_ASSET, CARD_SCALE)
             deck_sprite.center_x = SCREEN_WIDTH / 2
@@ -85,41 +79,145 @@ class PokerGameClient(arcade.Window):
         self.sio = socketio.Client()
         self.server_url = "http://127.0.0.1:5000"  # Change to servers IP when flask starts running
 
-        # GUI state
+        # GUI
         self.status_text = "Not Connected"
         self.player_name = "Player"
-
-        self.seat_position = 0  # default 0
-
-        # Player list
+        self.seat_position = 0
         self.player_list = []
-
-        # Lobby
         self.lobby = []
+        self.all_ready = False
+        self.is_ready = False
 
-        # Thread-safe queue for hands and community cards
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
         self.incoming_community_cards = []
         self.community_lock = threading.Lock()
 
-    def run_window(self):
+        self.ui = gui.UIManager()
+        self.ready_button = None
+        self.start_button = None
+        self.bet_button = None
+        self.fold_button = None
+        self.check_button = None
+        self.raise_button = None
+        self.call_button = None
+
+        self.anchor = None
+        self.start_box = None
+        self.action_row = None
+        self.left_column = None
+        self.right_column = None
+
+        self.phase = Phase.LOBBY
+
+    def setup(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
+        self.setup_ui()
 
-    def connect_to_server(self):
-        # Connect to the SocketIO server
-        try:
-            self.sio.connect(self.server_url)
-        except Exception as e:
-            print("Connection failed:", e)
-            self.status_text = "Failed to connect."
+    # -------------------- UI --------------------
+    def setup_ui(self):
+        self.ui.enable()
+        self.anchor = gui.UIAnchorLayout()
+        self.ui.add(self.anchor)
 
-    # --------------------- Socket events ---------------------
+        self.start_box = gui.UIBoxLayout(space_between=10)
+        self.ready_button = gui.UIFlatButton(text="Ready", width=160)
+        self.start_button = gui.UIFlatButton(text="Start Game", width=160)
 
+        @self.ready_button.event("on_click")
+        def _on_ready_click(event):
+            self.sio.emit("ready", {"action": "toggle"})
+
+        @self.start_button.event("on_click")
+        def _on_start_click(event):
+            if self.all_ready and len(self.lobby) >= 2:
+                self.sio.emit("start_game", {})
+            else:
+                self.status_text = "Waiting for everyone to be ready..."
+
+        self.start_box.add(self.ready_button)
+        self.start_box.add(self.start_button)
+
+        self.ui.add(
+            self.anchor.add(
+                anchor_x="right",
+                anchor_y="bottom",
+                align_x=-10,
+                align_y=10,
+                child=self.start_box
+            )
+        )
+
+        # Action buttons
+        self.action_row = gui.UIBoxLayout(vertical=False, space_between=20)
+        self.left_column = gui.UIBoxLayout(space_between=8)
+        self.right_column = gui.UIBoxLayout(space_between=8)
+
+        self.check_button = gui.UIFlatButton(text="Check", width=140)
+        self.fold_button = gui.UIFlatButton(text="Fold", width=140)
+        self.bet_button = gui.UIFlatButton(text="Bet", width=140)
+        self.raise_button = gui.UIFlatButton(text="Raise", width=140)
+        self.call_button = gui.UIFlatButton(text="Call", width=140)
+
+        @self.check_button.event("on_click")
+        def _on_check_click(event):
+            self.sio.emit("player_action", {"action": "check"})
+        @self.fold_button.event("on_click")
+        def _on_fold_click(event):
+            self.sio.emit("player_action", {"action": "fold"})
+        @self.bet_button.event("on_click")
+        def _on_bet_click(event):
+            self.sio.emit("player_action", {"action": "bet", "amount": 10})
+        @self.raise_button.event("on_click")
+        def _on_raise_click(event):
+            self.sio.emit("player_action", {"action": "raise", "amount": 10})
+        @self.call_button.event("on_click")
+        def _on_call_click(event):
+            self.sio.emit("player_action", {"action": "call"})
+
+        self.left_column.add(self.check_button)
+        self.left_column.add(self.fold_button)
+        self.right_column.add(self.bet_button)
+        self.right_column.add(self.call_button)
+        self.right_column.add(self.raise_button)
+        self.action_row.add(self.left_column)
+        self.action_row.add(self.right_column)
+
+        self.ui.add(
+            self.anchor.add(
+                anchor_x="right",
+                anchor_y="bottom",
+                align_x=-10,
+                align_y=10,
+                child=self.action_row
+            )
+        )
+
+        self.apply_phase(Phase.LOBBY)
+
+    def set_group_visible(self, container, visible: bool):
+        container.visible = visible
+        for child in container.children:
+            child.visible = visible
+            child.enabled = visible
+
+    def apply_phase(self, phase: Phase):
+        self.phase = phase
+        if phase == Phase.LOBBY:
+            self.set_group_visible(self.start_box, True)
+            self.set_group_visible(self.action_row, False)
+        else:
+            self.set_group_visible(self.start_box, False)
+            self.set_group_visible(self.action_row, True)
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.ready_button.text = "Unready" if self.is_ready else "Ready"
+        self.start_button.disabled = not (self.all_ready and len(self.lobby) >= 2)
+
+    # -------------------- SOCKET --------------------
     def register_socket_events(self):
-        # List of how the GUI will react to server events
-
         @self.sio.event
         def connect():
             print("Connected to server.")
@@ -127,22 +225,30 @@ class PokerGameClient(arcade.Window):
             self.sio.emit("set_name", {"player_name": self.player_name})
 
         @self.sio.on("lobby_state")
-        def update_lobby_state(player_dictionaries: list):
-            self.lobby = player_dictionaries or []
-            names = [f"{player['name']}{' [x]' if player.get('ready') else ' [ ]'}" for player in self.lobby]
-            all_ready = (len(self.lobby) > 0) and all(player.get('ready') for player in self.lobby)
-            self.status_text = f"Lobby: {', '.join(names)} | All ready: {all_ready}"
+        def on_lobby_state(data):
+            self.lobby = data or []
+            self.all_ready = len(self.lobby) > 0 and all(p.get("ready", False) for p in self.lobby)
+            names = [f"{p['name']}{' [x]' if p.get('ready') else ' [ ]'}" for p in self.lobby]
+            self.status_text = f"Lobby: {', '.join(names)} | All ready: {self.all_ready}"
+            self.update_buttons()
 
         @self.sio.on("player_list")
         def update_player_list(player_dictionaries: list):
             print("Player list", player_dictionaries)
             self.status_text = f"Players: {', '.join([player['name'] for player in player_dictionaries])}"
             self.player_list = player_dictionaries
-            
 
-        @self.sio.on("seat_position")
-        def update_seat_position(seat_position: int):
+        @self.sio.on("set_seat_position")
+        def set_seat_position(seat_position: int):
             self.seat_position = seat_position
+
+        @self.sio.on("round_started")
+        def on_round_started(_data):
+            self.apply_phase(Phase.IN_HAND)
+
+        @self.sio.on("round_reset")
+        def on_round_reset(_data):
+            self.apply_phase(Phase.LOBBY)
 
         @self.sio.on("hand")
         def update_hand(hand_cards: list):
@@ -152,57 +258,44 @@ class PokerGameClient(arcade.Window):
             with self.incoming_lock:
                 self.incoming_hands.append(hand_cards)
 
-        @self.sio.on("community_cards")
+        @self.sio.on("your_turn")
+        def your_turn(data):
+            self.status_text = data["message"]
+
+        @self.sio.on("community_update")
         def update_community_cards(cards: list):
             with self.community_lock:
                 self.incoming_community_cards.append(cards)
 
-        @self.sio.on("message")
-        def post_message(message: str):
-            print(message)
-            self.status_text = message
+        @self.sio.on("error")
+        def on_error(data):
+            self.status_text = f"Error: {data['message']}"
 
-        @self.sio.on("error_message")
-        def post_error(message: str):
-            print("Error:", message)
-            self.status_text = f"Error: {message}"
+    def connect_to_server(self):
+        try:
+            self.sio.connect(self.server_url)
+        except Exception as e:
+            print("Connection failed:", e)
+            self.status_text = "Failed to connect."
 
-    # --------------------- DRAWING ---------------------
-
+    # -------------------- DRAW --------------------
     def on_draw(self):
-        # Render screen
         self.clear()
+        cx, cy = self.table_center_x, self.table_center_y
+        arcade.draw_ellipse_filled(cx, cy, self.table_width, self.table_height, arcade.color.CAPUT_MORTUUM)
 
-        # Main Table
-        center_x = SCREEN_WIDTH // 2
-        center_y = SCREEN_HEIGHT // 2
-        width = 800  # Width of the ellipse
-        height = 500  # Height of the ellipse
-        color = arcade.color.CAPUT_MORTUUM
-        arcade.draw_ellipse_filled(center_x, center_y, width, height, color)
-
-        # Draw stools
         self.draw_stools_around_table()
-
-        # Draw players
         self.draw_players_around_table()
 
         self.deck_back_sprites.draw()
-
-        # # Render deck
-        # self.card_list.draw()
-
-        # Render hand
-        self.hand_cards.draw()
-        # Render deck
         self.community_cards.draw()
-
-        # Render facedown cards
-        for seat, hand in self.other_hands.items():
+        self.hand_cards.draw()
+        for hand in self.other_hands.values():
             hand.draw()
 
-        # Draw status
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
+        self.ui.draw()
+
 
     # render the player name at each stool with the client player localized to the bottom.
     def draw_players_around_table(self):
@@ -218,6 +311,7 @@ class PokerGameClient(arcade.Window):
             # Draw Player
             arcade.draw_text(player["name"], x - 30, y - 50, arcade.color.WHITE, 16)  # positioning could use some work
             # arcade.draw_text(player["money_count"], x - 30, y - 70, arcade.color.WHITE, 16)
+
 
     # helper function for update_player_list to draw facedown cards
     def create_facedown_hand_for_player(self, seat_position):
@@ -244,7 +338,7 @@ class PokerGameClient(arcade.Window):
             if i == 0:
                 card_back.center_y = base_y + 70
             hand_sprites.append(card_back)
-        
+
             end_pos = (base_x + i * space_offset, base_y + i * 10)
             self.enqueue_deal(card_back, end_pos, duration=0.25, delay=0.3)
 
@@ -274,7 +368,7 @@ class PokerGameClient(arcade.Window):
             leg_dy = math.sin(theta) * -1
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
-    # Handles deal animations
+    # -------------------- ANIMATION --------------------
     def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.3):
         start_x, start_y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120
         sprite.center_x, sprite.center_y = start_x, start_y
@@ -290,6 +384,7 @@ class PokerGameClient(arcade.Window):
             "done": False,
         }
         self.deal_animations.append(anim)
+
 
     def update_animations(self):
         """Advance and apply any active deal animations. Call this from on_update()."""
@@ -325,8 +420,8 @@ class PokerGameClient(arcade.Window):
         # keep only running animations
         self.deal_animations = still_running
 
-    # --------------------- DISPLAY CARDS
 
+    # -------------------- DISPLAY CARDS --------------------
     def display_hand(self, cards):
         # Display cards received from server
         self.hand_cards = arcade.SpriteList()
@@ -345,6 +440,7 @@ class PokerGameClient(arcade.Window):
             # Animate the deal from the deck to the player's hand
             end_pos = (start_x + i * 100, y)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
+
 
     # Card dealing animation
     def display_community_cards(self, cards):
@@ -369,8 +465,9 @@ class PokerGameClient(arcade.Window):
                 self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.3)
             else:
                 self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
-    # --------------------- UPDATES ---------------------
 
+
+    # -------------------- UPDATE --------------------
     def on_update(self, delta_time):
         # Process facedown cards when player list changes
         if self.cards_dealt:
@@ -397,39 +494,10 @@ class PokerGameClient(arcade.Window):
 
         self.update_animations()
 
-    # --------------------- KEY EVENTS ---------------------
-
-    def on_key_press(self, key, modifiers):
-        if key == arcade.key.S:
-            print("Requesting to start game...")
-            self.sio.emit("start_game", {})
-
-        if key == arcade.key.F:
-            print("Requesting flop...")
-            self.sio.emit("request_flop", {})
-
-        if key == arcade.key.T:
-            print("Requesting turn...")
-            self.sio.emit("request_turn", {})
-
-        if key == arcade.key.R:
-            print("Requesting river...")
-            self.sio.emit("request_river", {})
-
-        if key == arcade.key.N:  # Reset round
-            print("Requesting round reset...")
-            self.sio.emit("reset_round", {})
-
-        if key == arcade.key.RETURN:
-            print("Readied up")
-            self.sio.emit("ready", {"action": "toggle"})
-
-
 def main():
     window = PokerGameClient()
-    window.run_window()
+    window.setup()
     arcade.run()
-
 
 if __name__ == "__main__":
     main()
