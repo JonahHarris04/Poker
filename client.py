@@ -281,7 +281,7 @@ class PokerGameClient(arcade.Window):
             acts = _.get("actions", [])
             self.set_action_buttons(acts)
 
-        @self.sio.on("community_update")
+        @self.sio.on("community_cards")
         def update_community_cards(cards: list):
             with self.community_lock:
                 self.incoming_community_cards.append(cards)
