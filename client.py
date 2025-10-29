@@ -216,6 +216,20 @@ class PokerGameClient(arcade.Window):
         self.ready_button.text = "Unready" if self.is_ready else "Ready"
         self.start_button.disabled = not (self.all_ready and len(self.lobby) >= 2)
 
+    # Helper function for enabling and disabling buttons based off turn and round status
+    def set_action_buttons(self, actions):
+        # disable all buttons
+        for b in [self.check_button, self.fold_button, self.bet_button, self.raise_button, self.call_button]:
+            b.disabled = True
+            b.visible = True
+        # Enable buttons based on
+        allowed = set(actions or [])
+        self.check_button.disabled = "check" not in allowed
+        self.fold_button.disabled = "fold" not in allowed
+        self.bet_button.disabled = "bet" not in allowed
+        self.raise_button.disabled = "raise" not in allowed
+        self.call_button.disabled = "call" not in allowed
+
     # -------------------- SOCKET --------------------
     def register_socket_events(self):
         @self.sio.event
@@ -261,6 +275,11 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("your_turn")
         def your_turn(data):
             self.status_text = data["message"]
+
+        @self.sio.on("available_actions")
+        def available_actions(_):
+            acts = _.get("actions", [])
+            self.set_action_buttons(acts)
 
         @self.sio.on("community_update")
         def update_community_cards(cards: list):

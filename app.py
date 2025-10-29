@@ -17,6 +17,12 @@ game = PokerGame()
 
 player_counter = 0
 
+# Helper function for when it is a player's turn
+def send_turn_prompt(player):
+    emit('your_turn', {"message": "It's your turn!"}, to=player.uuid)
+    # Decides what buttons can and can't be pressed
+    emit('available_actions', {"actions": game.get_available_actions(player.uuid)}, to=player.uuid)
+
 
 # Broadcast entire game state to all players
 def broadcast_game_state():
@@ -125,7 +131,7 @@ def handle_start_game(_):
 
     # Notify current player it's their turn
     current_player = game.current_player()
-    emit('message', "It's your turn!", to=current_player.uuid)
+    send_turn_prompt(current_player)
 
 
 @socketio.on('player_action')
@@ -135,7 +141,7 @@ def handle_action(data):
     amount = int(data.get('amount', 0))
 
     if not game.round_active:
-        emit('error_message', 'No active round.')
+        emit('error_message', {"message": "No active round."}, to=uuid)
         return
 
     # Apply the action in game logic
@@ -154,7 +160,7 @@ def handle_action(data):
         # Move to next active player
         next_player = game.advance_turn()
         if next_player:
-            emit('your_turn', {"message": "It's your turn!"}, to=next_player.uuid)
+            send_turn_prompt(next_player)
 
 
 def progress_betting_round():
@@ -164,12 +170,13 @@ def progress_betting_round():
         # Send newly dealt community cards only (keeps same behavior as before)
         emit('community_update', {"cards": [str(c) for c in game.community_cards]}, broadcast=True)
 
-        # Notify first active player in new street
-        current_player = game.current_player()
-        emit('your_turn', {"message": "It's your turn!"}, to=current_player.uuid)
-
         # Broadcast updated game state
         emit('game_state', game.serialize_game_state(), broadcast=True)
+
+        # Notify first active player in new street
+        current_player = game.current_player()
+        send_turn_prompt(current_player)
+
     else:
         # Showdown logic (placeholder)
         emit('message', "Round over! Showdown now.", broadcast=True)

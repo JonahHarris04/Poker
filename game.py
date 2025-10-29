@@ -18,6 +18,7 @@ class PokerGame:
         self.street_contributions = {}
         self.minimum_raise = 0
         self.street = "preflop"  # preflop, flop, turn, river, showdown
+        self.last_aggressor = None # Last person to have set a new high
 
     # -------------------- Player Management --------------------
     def add_player(self, name, uuid, seat_position, seat_position_flag, is_ready):
@@ -66,6 +67,7 @@ class PokerGame:
         self.current_bet = 0
         self.minimum_raise = 10
         self.street_contributions = {uuid: 0 for uuid in self.players.keys()}
+        self.last_aggressor = None
 
         # Deal 2 cards to each player
         for player in self.players.values():
@@ -86,6 +88,7 @@ class PokerGame:
         self.community_cards.clear()
         self.turn_order = list(self.players.keys())
         self.current_turn_index = 0
+        self.last_aggressor = None
         for player in self.players.values():
             player.reset_for_round()
             player.acted_this_round = False
@@ -102,11 +105,32 @@ class PokerGame:
                 return p
         return None
 
+    # ------------------Game Logic Helpers--------------
+    def reset_actions_after_aggression(self, aggressor_uuid):
+        for player in self.players.values():
+            player.acted_this_round = False
+        self.players[aggressor_uuid].acted_this_round = True
+        self.last_aggressor = aggressor_uuid
+
+    def _first_active_index(self):
+        # put turn on first non-folded player with chips >=0
+        idx = 0
+        if not self.turn_order:
+            return 0
+        while True:
+            candidate = self.players[self.turn_order[idx]]
+            if not candidate.folded:
+                return idx
+            idx = (idx + 1) % len(self.turn_order)
+
     # -------------------- Betting --------------------
     def apply_action(self, uuid, action, amount=0):
         p = self.players.get(uuid)
         if not p or p.folded or p.chips == 0:
             return False, "Invalid player state."
+
+        my_contribution = self.street_contributions.get(uuid, 0)
+        price_to_call = max(0, self.current_bet - my_contribution)
 
         # FOLD
         if action == "fold":
@@ -115,67 +139,102 @@ class PokerGame:
             return True, "Player folded."
 
         # CHECK
+        # Changed to fit with the acted_this_round logic
         if action == "check":
-            if self.street_contributions[uuid] == self.current_bet:
+            if price_to_call == 0:
                 p.acted_this_round = True
-                return True, "Checked."
+                return True, f"{p.name} checked."
             return False, "Cannot check facing a bet."
 
         # CALL
         if action == "call":
-            call_amount = self.current_bet - self.street_contributions[uuid]
-            bet_amount = min(call_amount, p.chips)
-            p.chips -= bet_amount
-            self.pot.add_to_pot(bet_amount)
-            self.street_contributions[uuid] += bet_amount
+            if price_to_call == 0:
+                return False, "Nothing to call."
+            to_put = min(price_to_call, p.chips)
+            p.chips -= to_put
+            self.pot.add_to_pot(to_put)
+            self.street_contributions[uuid] = my_contribution + to_put
             p.acted_this_round = True
-            return True, "Called."
+            return True, f"{p.name} called."
 
-        # BET or RAISE
-        if action in ["bet", "raise"]:
+        # BET (only if no current bet)
+        if action == "bet":
+            if self.current_bet > 0:
+                return False, "Bet not allowed; there is already a bet. Use raise."
+            if amount < self.minimum_raise:
+                return False, f"Minimum bet is {self.minimum_raise}."
             if amount > p.chips:
                 return False, "Not enough chips."
-            if amount < 1:
-                return False, "Must bet at least 1 chip."
-
             p.chips -= amount
             self.pot.add_to_pot(amount)
-            self.street_contributions[uuid] += amount
-            self.current_bet = max(self.current_bet, self.street_contributions[uuid])
-            p.acted_this_round = True
-            return True, "Bet/Raised."
+            self.street_contributions[uuid] = my_contribution + amount
+            self.current_bet = self.street_contributions[uuid]
+            self.reset_actions_after_aggression(uuid)
+            return True, f"{p.name} bet {amount}."
+
+        # RAISE
+        if action == "raise":
+            #blocks against raising a check or raising when nothing has been bet
+            if price_to_call == 0 and self.current_bet > 0:
+                pass
+            raise_over_call = amount
+            total_needed = price_to_call + raise_over_call
+            if raise_over_call < self.minimum_raise and p.chips > price_to_call:
+                return False, f"Minimum raise is {self.minimum_raise}."
+            if total_needed > p.chips:
+                return False, "Not enough chips."
+            p.chips -= total_needed
+            self.pot.add_to_pot(total_needed)
+            self.street_contributions[uuid] = my_contribution + total_needed
+            self.current_bet = self.street_contributions[uuid]
+            self.reset_actions_after_aggression(uuid)
+            return True, f"{p.name} raised by {raise_over_call}."
 
         # ALL-IN
         if action == "allin":
-            allin_amount = p.chips
+            if p.chips == 0:
+                return False, "Already all-in."
+            to_put = p.chips
             p.chips = 0
-            self.pot.add_to_pot(allin_amount)
-            self.street_contributions[uuid] += allin_amount
-            self.current_bet = max(self.current_bet, self.street_contributions[uuid])
-            p.acted_this_round = True
-            return True, "All-in."
+            self.pot.add_to_pot(to_put)
+            self.street_contributions[uuid] = my_contribution + to_put
+            # If this all-in sets a new high, it's aggression; otherwise it's just a call/shove
+            if self.street_contributions[uuid] > self.current_bet:
+                self.current_bet = self.street_contributions[uuid]
+                self.reset_actions_after_aggression(uuid)
+                return True, f"{p.name} went all-in for {to_put}."
+            else:
+                p.acted_this_round = True
+                return True, f"{p.name} called all-in."
 
         return False, "Unknown action."
 
+    # Changed to fit with new logic
     def is_betting_round_complete(self):
-        active = [p for p in self.players.values() if not p.folded and p.chips > 0]
-
-        # Only 1 left -> showdown
-        if sum(not p.folded for p in self.players.values()) <= 1:
+        # 1 or 0 players not folded
+        alive = [p for p in self.players.values() if not p.folded]
+        if len(alive) <= 1:
             self.street = "showdown"
             return True
 
-        # Everyone matched the bet or all-in
-        return all(
-            self.street_contributions[p.uuid] == self.current_bet or p.chips == 0
-            for p in active
+        # Everyone has matched current price or is out of chips
+        everyone_at_price = all(
+            p.folded or p.chips == 0 or self.street_contributions[p.uuid] == self.current_bet
+            for p in alive
         )
+        if not everyone_at_price:
+            return False
+
+        # everyone has acted since last aggression
+        everyone_acted = all(p.folded or p.acted_this_round or p.chips == 0 for p in alive)
+        return everyone_acted
 
     def move_to_next_street(self):
         # Reset contributions for new street
         for uuid in self.street_contributions:
             self.street_contributions[uuid] = 0
         self.current_bet = 0
+        self.last_aggressor = None
 
         # Reset acted_this_round
         for p in self.players.values():
@@ -198,7 +257,7 @@ class PokerGame:
             self.street = "showdown"
 
         # Set current player to first active
-        self.current_turn_index = 0
+        self.current_turn_index = self._first_active_index()
         while self.current_player().folded or self.current_player().chips == 0:
             self.advance_turn()
 
@@ -208,13 +267,20 @@ class PokerGame:
         if not p or p.folded:
             return []
 
-        my_contribution = self.street_contributions[uuid]
+        my_contribution = self.street_contributions.get(uuid, 0)
+        price_to_call = max(0, self.current_bet - my_contribution)
+
         if p.chips == 0:
             return ["fold"]
-        if self.current_bet == my_contribution:
-            return ["check", "bet", "fold", "allin"]
+        # If no one has bet price_to_call is zero
+        if price_to_call == 0:
+            return ["check", "bet", "allin", "fold"]
         else:
-            return ["call", "raise", "fold", "allin"]
+            actions = ["call", "allin", "fold"]
+            # Hide raise if player can't do more than call
+            if p.chips > price_to_call:
+                actions.insert(1, "raise")
+            return actions
 
     # -------------------- Serialize --------------------
     def serialize_game_state(self):
