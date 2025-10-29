@@ -102,6 +102,7 @@ def handle_start_game(_):
     print("New round started")
 
     emit('round_started', {}, broadcast=True)
+    emit('game_state', game.serialize_game_state(), broadcast=True)
 
     # Send each player their hand
     for player in game.players.values():

@@ -110,6 +110,8 @@ class PokerGameClient(arcade.Window):
 
         self.phase = Phase.LOBBY
 
+        self.current_game_state = None
+
     def setup(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
@@ -295,6 +297,10 @@ class PokerGameClient(arcade.Window):
         def post_error(data):
             self.status_text = f"Error: {data['message']}"
 
+        @self.sio.on("game_state")
+        def on_game_state(state):
+            self.current_game_state = state
+
     def connect_to_server(self):
         try:
             self.sio.connect(self.server_url)
@@ -320,6 +326,16 @@ class PokerGameClient(arcade.Window):
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
         self.ui.draw()
 
+        # players chip amount and pot amount
+        if self.current_game_state:
+            # Find client player
+            my_uuid = self.sio.sid
+            my_player = next((p for p in self.current_game_state["players"] if p["uuid"] == my_uuid), None)
+            my_chips = my_player["chips"] if my_player else 0
+            pot_amount = self.current_game_state.get("pot", 0)
+
+            arcade.draw_text(f"My Chips: {my_chips}", 10, SCREEN_HEIGHT - 30, arcade.color.YELLOW, 18)
+            arcade.draw_text(f"Pot: {pot_amount}", 10, SCREEN_HEIGHT - 60, arcade.color.ORANGE, 18)
 
     # render the player name at each stool with the client player localized to the bottom.
     def draw_players_around_table(self):
