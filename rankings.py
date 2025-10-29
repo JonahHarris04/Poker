@@ -112,6 +112,8 @@ def has_straight(full_hand):
 
 
 def check_straight_offsets(card, full_hand):
+    if card.number > 10:
+        return 0
     capture = 0
     for i in range(1, 5):
         # special case for Ace high
@@ -186,6 +188,6 @@ def has_high_card(full_hand):
 
 
 ranking = rank_hand(
-    [Card.Card("Hearts", "K"), Card.Card("Hearts", "2"), Card.Card("Clubs", "3"), Card.Card("Hearts", "5"),
-     Card.Card("Hearts", "A"), Card.Card("Hearts", "3"), Card.Card("Diamonds", "3")])
+    [Card.Card("Clubs", "10"), Card.Card("Hearts", "Q"), Card.Card("Clubs", "3"), Card.Card("Hearts", "4"),
+     Card.Card("Hearts", "J"), Card.Card("Hearts", "K"), Card.Card("Diamonds", "A")])
 print(hand_rank_number_to_string[ranking[0]], ranking[1])
