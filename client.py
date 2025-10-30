@@ -478,7 +478,7 @@ class PokerGameClient(arcade.Window):
             self.hand_cards.append(card)
 
             # Animate the deal from the deck to the player's hand
-            end_pos = (start_x + i * 100, y)
+            end_pos = (start_x + i * 100, y + 50)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
 
 
