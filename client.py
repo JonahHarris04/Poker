@@ -329,7 +329,7 @@ class PokerGameClient(arcade.Window):
         # players chip amount and pot amount
         if self.current_game_state:
             # Find client player
-            my_uuid = self.sio.sid
+            my_uuid = self.sio.get_sid()
             my_player = next((p for p in self.current_game_state["players"] if p["uuid"] == my_uuid), None)
             my_chips = my_player["chips"] if my_player else 0
             pot_amount = self.current_game_state.get("pot", 0)
