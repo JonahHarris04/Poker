@@ -17,10 +17,17 @@ game = PokerGame()
 
 player_counter = 0
 
+# Helper function for when it is a player's turn
+def send_turn_prompt(player):
+    emit('your_turn', {"message": "It's your turn!"}, to=player.uuid)
+    # Decides what buttons can and can't be pressed
+    emit('available_actions', {"actions": game.get_available_actions(player.uuid)}, to=player.uuid)
 
-# Helper
-def broadcast_lobby():
-    emit("lobby_state", game.serialize_lobby(), broadcast=True)
+
+# Broadcast entire game state to all players
+def broadcast_game_state():
+    state = game.serialize_game_state()
+    emit("game_state", state)
 
 
 # Event handlers
@@ -66,7 +73,14 @@ def handle_ready(data):
         new_val = game.set_ready(uuid, bool(data.get('ready', True)))
 
     print(f"Player {uuid} ready set to {new_val}")
-    broadcast_lobby()
+    # Broadcast updated player list AND ready state
+    lobby_state = [{
+        "uuid": p.uuid,
+        "name": p.name,
+        "ready": getattr(p, "ready", False)
+    } for p in game.players.values()]
+
+    emit("lobby_state", lobby_state, broadcast=True)
 
 
 # Start a new round
@@ -87,13 +101,70 @@ def handle_start_game(_):
     game.start_round()
     print("New round started")
 
+    emit('round_started', {}, broadcast=True)
+    emit('game_state', game.serialize_game_state(), broadcast=True)
+
     # Send each player their hand
     for player in game.players.values():
         emit('hand', [str(card) for card in player.hand], to=player.uuid)
 
     # Notify current player it's their turn
     current_player = game.current_player()
-    emit('message', "It's your turn!", to=current_player.uuid)
+    send_turn_prompt(current_player)
+
+
+@socketio.on('player_action')
+def handle_action(data):
+    uuid = request.sid
+    action = data.get('action')
+    amount = int(data.get('amount', 0))
+
+    if not game.round_active:
+        emit('error_message', {"message": "No active round."}, to=uuid)
+        return
+
+    # Apply the action in game logic
+    success, message = game.apply_action(uuid, action, amount)
+    if not success:
+        emit('error_message', message, to=uuid)
+        return
+
+    # Broadcast game state to all players
+    emit('message', message, broadcast=True)
+
+    print("DEBUG: Action received:", action)
+    print("DEBUG: Betting round complete?", game.is_betting_round_complete())
+    print("DEBUG: Current street:", game.street)
+
+    # Check if betting round is complete
+    if game.is_betting_round_complete():
+        progress_betting_round()
+    else:
+        # Move to next active player
+        next_player = game.advance_turn()
+        if next_player:
+            send_turn_prompt(next_player)
+
+
+def progress_betting_round():
+    # Automatically move to next street or showdown
+    if game.street != "showdown":
+        game.move_to_next_street()
+        # Send newly dealt community cards only (keeps same behavior as before)
+        emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+
+        # Broadcast updated game state
+        emit('game_state', game.serialize_game_state(), broadcast=True)
+
+        # Notify first active player in new street
+        current_player = game.current_player()
+        send_turn_prompt(current_player)
+
+    else:
+        # Showdown logic (placeholder)
+        emit('message', "Round over! Showdown now.", broadcast=True)
+        emit('game_state', game.serialize_game_state(), broadcast=True)
+
 
 
 @socketio.on('request_flop')
@@ -107,7 +178,7 @@ def handle_flop_request(_):
 
     game.deal_flop()
     print("Flop dealt:", [str(c) for c in game.community_cards])
-    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+    emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
 
 
 @socketio.on('request_turn')
@@ -116,7 +187,7 @@ def handle_turn_request(_):
         emit('error_message', 'Flop must be dealt first.')
         return
     game.deal_turn()
-    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+    emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
 
 
 @socketio.on('request_river')
@@ -125,7 +196,7 @@ def handle_river_request(_):
         emit('error_message', 'Turn must be dealt first.')
         return
     game.deal_river()
-    emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
+    emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
 
 
 @socketio.on('reset_round')
