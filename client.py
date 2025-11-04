@@ -1,12 +1,19 @@
-import arcade
-import socketio
+"""
+CS 3050 Poker Game - client.py
+Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
+"""
+
+
+from enum import Enum
 import threading
 import math
 import time
+import arcade
+import socketio
 import arcade.gui as gui
 from Card import Card
 from game import PokerGame
-from enum import Enum
+
 
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 768
@@ -484,7 +491,6 @@ class PokerGameClient(arcade.Window):
 
     # Card dealing animation
     def display_community_cards(self, cards):
-        total = len(cards)
         gap = 18
         y = self.table_center_y
         deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120 #deck origin point
