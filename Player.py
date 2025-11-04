@@ -1,3 +1,9 @@
+"""
+CS 3050 Poker Game - Player.py
+Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
+"""
+
+
 class Player:
     def __init__(self, name, uuid, seat_position, seat_position_flag, is_ready):
         self.name = name

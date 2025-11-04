@@ -1,6 +1,13 @@
+"""
+CS 3050 Poker Game - Card.py
+Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
+"""
+
+
 import arcade
 
-ranks = {"A": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13}
+ranks = {"A": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6,
+         "7": 7, "8": 8, "9": 9, "10": 10, "J": 11, "Q": 12, "K": 13}
 
 
 class Card(arcade.Sprite):

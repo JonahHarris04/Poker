@@ -1,10 +1,18 @@
-import Deck, Player, Pot
+"""
+CS 3050 Poker Game - game.py
+Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
+"""
+
+
+import deck
+import Player
+import Pot
 
 class PokerGame:
 
     def __init__(self):
         self.players = {}
-        self.deck = Deck.Deck()
+        self.deck = deck.Deck()
         self.pot = Pot.Pot()
         self.community_cards = []
 
@@ -52,7 +60,7 @@ class PokerGame:
 
     # -------------------- Round Management --------------------
     def start_round(self):
-        self.deck = Deck.Deck()
+        self.deck = deck.Deck()
         self.deck.shuffle()
         self.pot.clear_pot()
         self.community_cards = []
@@ -82,7 +90,7 @@ class PokerGame:
 
     def reset_round(self):
         self.round_active = False
-        self.deck = Deck.Deck()
+        self.deck = deck.Deck()
         self.deck.shuffle()
         self.pot.clear_pot()
         self.community_cards.clear()
