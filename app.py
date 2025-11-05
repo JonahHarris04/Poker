@@ -4,13 +4,14 @@ Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
 """
 
 
+import os
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
 from game import PokerGame
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")  # allow external connections
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")  # allow external connections
 
 # Single game instance
 game = PokerGame()
@@ -212,4 +213,8 @@ def handle_reset_round(_):
 
 if __name__ == "__main__":
     print("Starting poker server...")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app,
+                 host="0.0.0.0",
+                 port = int(os.environ.get("PORT", 5000)),
+                 debug=True,
+                 allow_unsafe_werkzeug=True)
