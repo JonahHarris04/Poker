@@ -3,6 +3,9 @@ CS 3050 Poker Game - app.py
 Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
 """
 
+hand_ranking_weight_to_string = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind", 5: "Straight",
+                                 6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
+                                 10: "Royal Flush"}
 
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
@@ -162,8 +165,19 @@ def progress_betting_round():
 
     else:
         # Showdown logic (placeholder)
+        best_rank, winning_players = game.rank_all_player_hands()
+        print(f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}')
+        if len(winning_players) < 1:
+            emit('error_message', "Less than 1 winning player... A curious bug indeed.")
+        if len(winning_players) == 1:
+            game.pot.payout_single(winning_players[0])
+        else:
+            game.pot.payout_split_pot(winning_players)
+        game.reset_round()
+
         emit('message', "Round over! Showdown now.", broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
+
 
 
 
@@ -178,6 +192,7 @@ def handle_flop_request(_):
 
     game.deal_flop()
     print("Flop dealt:", [str(c) for c in game.community_cards])
+    print(f'BEST HAND {game.rank_all_player_hands()}')
     emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
 
 
