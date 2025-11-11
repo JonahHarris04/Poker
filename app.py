@@ -10,7 +10,13 @@ from flask_socketio import SocketIO, emit
 from game import PokerGame
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")  # allow external connections
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet",
+    ping_interval=10,   # server pings every 10s
+    ping_timeout=20,    # if no pong in 20s -> 'disconnect'
+)  # allow external connections
 
 # Single game instance
 game = PokerGame()
@@ -27,7 +33,7 @@ def send_turn_prompt(player):
 # Broadcast entire game state to all players
 def broadcast_game_state():
     state = game.serialize_game_state()
-    emit("game_state", state)
+    emit("game_state", state, broadcast=True)
 
 
 # Event handlers
@@ -112,6 +118,33 @@ def handle_start_game(_):
     current_player = game.current_player()
     send_turn_prompt(current_player)
 
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    print(f"Player disconnected: {sid}")
+
+    result = game.on_disconnect(sid)  #
+
+    #
+    emit('player_list', [p.to_dict() for p in game.players.values()], broadcast=True)
+
+    if result.get("ended_round"):
+        emit('message', "Round ended due to disconnect (not enough players).", broadcast=True)
+        # clear everyone’s hands + board so clients stay in sync
+        for player in game.players.values():
+            emit('hand', [], to=player.uuid)
+        emit('community_cards', [], broadcast=True)
+        emit('game_state', game.serialize_game_state(), broadcast=True)
+        return
+
+    # If a turn was vacated, prompt the next player (if any)
+    next_uuid = result.get("next_uuid")
+    if next_uuid and next_uuid in game.players:
+        next_player = game.players[next_uuid]
+        send_turn_prompt(next_player)
+
+    # Broadcast latest game state either way
+    emit('game_state', game.serialize_game_state(), broadcast=True)
 
 @socketio.on('player_action')
 def handle_action(data):
