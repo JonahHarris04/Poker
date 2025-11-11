@@ -373,8 +373,6 @@ class PokerGame:
             self.burn_card()
             self.community_cards.extend(self.deck.deal(1))
             self.street = "river"
-        elif self.street == "river":
-            self.street = "showdown"
 
         # Set current player to first active
         self.current_turn_index = self._first_active_index()
