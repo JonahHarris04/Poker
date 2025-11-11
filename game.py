@@ -102,6 +102,68 @@ class PokerGame:
             player.reset_for_round()
             player.acted_this_round = False
 
+    # Disconnect helper
+    def on_disconnect(self, uuid):
+        # returns a dictionary with a boolean of removal state, the removed player's uuid,
+        # and a boolean for if the round was ended due to disconnect
+        out = {"removed": False, "next_uuid": None, "ended_round": False}
+
+        if uuid not in self.players:
+            return out  # nothing to do
+
+        # Track whether this player was about to act
+        current_uuid = None
+        if self.turn_order:
+            current_uuid = self.turn_order[self.current_turn_index]
+
+        # Clean street contribution
+        if uuid in self.street_contributions:
+            self.street_contributions.pop(uuid, None)
+
+        # Remove from turn_order with careful index fix-up
+        if uuid in self.turn_order:
+            idx = self.turn_order.index(uuid)
+            self.turn_order.pop(idx)
+
+            # Adjust current_turn_index to remain valid
+            if self.turn_order:
+                if idx < self.current_turn_index or (
+                        idx == self.current_turn_index and self.current_turn_index == len(self.turn_order)):
+                    self.current_turn_index = max(0, self.current_turn_index - 1)
+                self.current_turn_index %= len(self.turn_order)
+            else:
+                self.current_turn_index = 0  # empty table
+
+        # Finally remove the player record
+        self.players.pop(uuid, None)
+        out["removed"] = True
+
+        # If no active round, nothing more to do
+        if not self.round_active:
+            return out
+
+        # Count remaining active (not folded, chips > 0)
+        active = [p for p in self.players.values() if not p.folded and p.chips > 0]
+
+        # If < 2 players remain, end the hand immediately
+        if len(active) < 2:
+            self.reset_round()
+            out["ended_round"] = True
+            return out
+
+        # If the disconnecting player was about to act, advance turn
+        if current_uuid == uuid and self.turn_order:
+            # Ensure current index points to a real player
+            cur = self.current_player()
+            if cur.folded or cur.chips == 0:
+                nxt = self.advance_turn()
+            else:
+                nxt = cur
+            out["next_uuid"] = nxt.uuid if nxt else None
+
+        return out
+
+
     # -------------------- Turn Management --------------------
     def current_player(self):
         return self.players[self.turn_order[self.current_turn_index]]

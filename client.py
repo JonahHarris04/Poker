@@ -83,7 +83,14 @@ class PokerGameClient(arcade.Window):
         self.deal_animations = []
 
         # Networking
-        self.sio = socketio.Client()
+        # self.sio = socketio.Client()
+        self.sio = socketio.Client(
+            reconnection=True,
+            reconnection_attempts=0,  # 0 = keep trying forever
+            reconnection_delay=1.0,
+            reconnection_delay_max=5.0,
+            request_timeout=10.0,
+        )
         self.server_url = "http://127.0.0.1:5000"  # Change to servers IP when flask starts running
 
         # GUI
@@ -123,6 +130,14 @@ class PokerGameClient(arcade.Window):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
         self.setup_ui()
+
+    # Cleanup for disconnects
+    def on_close(self):
+        try:
+            if self.sio.connected:
+                self.sio.disconnect()
+        finally:
+            super().on_close()
 
     # -------------------- UI --------------------
     def setup_ui(self):
