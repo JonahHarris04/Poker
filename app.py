@@ -18,7 +18,7 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     async_mode="eventlet",
     ping_interval=10,   # server pings every 10s
-    ping_timeout=20,    # if no pong in 20s -> 'disconnect'
+    ping_timeout=20,
 )  # allow external connections
 
 # Single game instance
@@ -28,9 +28,9 @@ player_counter = 0
 
 # Helper function for when it is a player's turn
 def send_turn_prompt(player):
-    emit('your_turn', {"message": "It's your turn!"}, to=player.uuid)
-    # Decides what buttons can and can't be pressed
-    emit('available_actions', {"actions": game.get_available_actions(player.uuid)}, to=player.uuid)
+    print(f"[TURN] Prompting: {player.name} ({player.uuid})")
+    socketio.emit('your_turn', {"message": "It's your turn!"}, room=player.uuid)
+    socketio.emit('available_actions', {"actions": game.get_available_actions(player.uuid)}, room=player.uuid)
 
 
 # Broadcast entire game state to all players
@@ -115,7 +115,7 @@ def handle_start_game(_):
 
     # Send each player their hand
     for player in game.players.values():
-        emit('hand', [str(card) for card in player.hand], to=player.uuid)
+        socketio.emit('hand', [str(card) for card in player.hand], room=player.uuid)
 
     # Notify current player it's their turn
     current_player = game.current_player()
@@ -126,28 +126,43 @@ def handle_disconnect():
     sid = request.sid
     print(f"Player disconnected: {sid}")
 
-    result = game.on_disconnect(sid)  #
+    result = game.on_disconnect(sid)
 
-    #
+    # You confirmed this message was showing before
+    emit('message', "A player has disconnected.", broadcast=True)
+
     emit('player_list', [p.to_dict() for p in game.players.values()], broadcast=True)
 
     if result.get("ended_round"):
         emit('message', "Round ended due to disconnect (not enough players).", broadcast=True)
-        # clear everyone’s hands + board so clients stay in sync
         for player in game.players.values():
             emit('hand', [], to=player.uuid)
         emit('community_cards', [], broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
         return
 
-    # If a turn was vacated, prompt the next player (if any)
     next_uuid = result.get("next_uuid")
-    if next_uuid and next_uuid in game.players:
-        next_player = game.players[next_uuid]
-        send_turn_prompt(next_player)
+    actor = None
 
-    # Broadcast latest game state either way
+    if next_uuid and next_uuid in game.players:
+        actor = game.players[next_uuid]
+    else:
+        # Fallback #1: whoever currently holds the turn after index fix-up
+        actor = game.current_player()
+        # Fallback #2: if current is invalid (folded/zero chips/None), advance once
+        if not actor or actor.folded or actor.chips == 0:
+            actor = game.advance_turn()
+
+    if actor:
+        # guarantee a fresh prompt so the client updates buttons
+        send_turn_prompt(actor)
+
     emit('game_state', game.serialize_game_state(), broadcast=True)
+
+@socketio.on('client_exit')
+def handle_client_exit(_=None):
+    return handle_disconnect()
+
 
 @socketio.on('player_action')
 def handle_action(data):
@@ -159,27 +174,19 @@ def handle_action(data):
         emit('error_message', {"message": "No active round."}, to=uuid)
         return
 
-    # Apply the action in game logic
-    success, message = game.apply_action(uuid, action, amount)
-    if not success:
-        emit('error_message', message, to=uuid)
+    ok, msg = game.apply_action(uuid, action, amount)
+    if not ok:
+        emit('error_message', msg, to=uuid)
         return
 
-    # Broadcast game state to all players
-    emit('message', message, broadcast=True)
+    emit('message', msg, broadcast=True)
 
-    print("DEBUG: Action received:", action)
-    print("DEBUG: Betting round complete?", game.is_betting_round_complete())
-    print("DEBUG: Current street:", game.street)
-
-    # Check if betting round is complete
     if game.is_betting_round_complete():
         progress_betting_round()
     else:
-        # Move to next active player
-        next_player = game.advance_turn()
-        if next_player:
-            send_turn_prompt(next_player)
+        nxt = game.advance_turn()
+        if nxt:
+            send_turn_prompt(nxt)
 
 
 def progress_betting_round():
@@ -254,7 +261,7 @@ def handle_reset_round(_):
 
     # Notify all clients to clear hands and community cards
     for player in game.players.values():
-        emit('hand', [], to=player.uuid)
+        socketio.emit('hand', [], room=player.uuid)
     emit('community_cards', [], broadcast=True)
 
 

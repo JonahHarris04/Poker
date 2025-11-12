@@ -135,6 +135,11 @@ class PokerGameClient(arcade.Window):
     def on_close(self):
         try:
             if self.sio.connected:
+                try:
+                    self.sio.emit("client_exit", {})
+                    time.sleep(0.1)  # let it flush
+                except Exception:
+                    pass
                 self.sio.disconnect()
         finally:
             super().on_close()
