@@ -191,7 +191,7 @@ def handle_action(data):
 
 def progress_betting_round():
     # Automatically move to next street or showdown
-    if game.street != "showdown":
+    if game.street != "river":
         game.move_to_next_street()
         # Send newly dealt community cards only (keeps same behavior as before)
         emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
