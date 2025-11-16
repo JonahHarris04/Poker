@@ -29,7 +29,7 @@ player_counter = 0
 # Helper function for when it is a player's turn
 def send_turn_prompt(player):
     print(f"[TURN] Prompting: {player.name} ({player.uuid})")
-    socketio.emit('your_turn', {"message": "It's your turn!"}, room=player.uuid)
+    socketio.emit('your_turn', {"message": f'it is {player.name}\'s turn'})
     socketio.emit('available_actions', {"actions": game.get_available_actions(player.uuid)}, room=player.uuid)
 
 
@@ -175,11 +175,7 @@ def handle_action(data):
         return
 
     ok, msg = game.apply_action(uuid, action, amount)
-    if not ok:
-        emit('error_message', msg, to=uuid)
-        return
-
-    emit('message', msg, broadcast=True)
+    emit('bet_message', msg, broadcast=True)
 
     if game.is_betting_round_complete():
         progress_betting_round()
@@ -215,6 +211,8 @@ def progress_betting_round():
             game.pot.payout_split_pot(winning_players)
         game.reset_round()
 
+        message = f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}'
+        emit('bet_message', message, broadcast=True)
         emit('message', "Round over! Showdown now.", broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
 

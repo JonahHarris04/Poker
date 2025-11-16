@@ -95,6 +95,7 @@ class PokerGameClient(arcade.Window):
 
         # GUI
         self.status_text = "Not Connected"
+        self.betting_text = "No Current Bet"
         self.player_name = "Player"
         self.seat_position = 0
         self.player_list = []
@@ -320,6 +321,11 @@ class PokerGameClient(arcade.Window):
             print(message)
             self.status_text = message
 
+        @self.sio.on("bet_message")
+        def post_bet_message(message: str):
+            print(message)
+            self.betting_text = message
+
         @self.sio.on("error_message")
         def post_error(data):
             self.status_text = f"Error: {data['message']}"
@@ -351,6 +357,7 @@ class PokerGameClient(arcade.Window):
             hand.draw()
 
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
+        arcade.draw_text(self.betting_text, 10, 40, arcade.color.WHITE, 16)
         self.ui.draw()
 
         # players chip amount and pot amount
