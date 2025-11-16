@@ -553,6 +553,8 @@ class PokerGameClient(arcade.Window):
             end_pos = (start_x + i * 100, y + 50)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
 
+    def display_community_cards(self, all_hands_data):
+        return 0
 
     # Card dealing animation
     def display_community_cards(self, cards):

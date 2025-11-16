@@ -213,6 +213,16 @@ def progress_betting_round():
             game.pot.payout_single(winning_players[0])
         else:
             game.pot.payout_split_pot(winning_players)
+        
+        # flip over all cards visually
+        all_hands = {}
+        for player in game.players.values():
+            if not player.folded and len(player.hand) > 0:
+                all_hands[player.seat_position] = [str(card) for card in player.hand]
+        emit('reveal_hands', {"hands":all_hands}, broadcast=True)
+        
+        # TODO: Add small break so players can see all flipped over cards before new round?
+
         game.reset_round()
 
         emit('message', "Round over! Showdown now.", broadcast=True)
