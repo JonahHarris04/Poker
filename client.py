@@ -112,6 +112,8 @@ class PokerGameClient(arcade.Window):
         self.incoming_lock = threading.Lock()
         self.incoming_community_cards = []
         self.community_lock = threading.Lock()
+        self.incoming_reveals = []
+        self.reveal_lock = threading.Lock()
 
         self.ui = gui.UIManager()
         self.ready_button = None
@@ -349,6 +351,12 @@ class PokerGameClient(arcade.Window):
             with self.community_lock:
                 self.incoming_community_cards.append(cards)
 
+        @self.sio.on("reveal_hands")
+        def on_reveal_hands(data):
+            hands_data = data.get("hands", {})
+            with self.reveal_lock:
+                self.incoming_reveals.append(hands_data)
+
         @self.sio.on("message")
         def post_message(message: str):
             print(message)
@@ -553,8 +561,45 @@ class PokerGameClient(arcade.Window):
             end_pos = (start_x + i * 100, y + 50)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
 
-    def display_community_cards(self, all_hands_data):
-        return 0
+    def reveal_all_hands(self, all_hands_data):
+        cx, cy = self.table_center_x, self.table_center_y
+        rx = self.table_width / 2.5
+        ry = self.table_height / 2.5
+        space_offset = 28
+
+        for seat_position_str, cards in all_hands_data.items():
+            # skip your own seat
+            seat_position = int(seat_position_str)
+            if seat_position == self.seat_position:
+                continue
+
+            # Calculate position for this seat
+            theta = -2 * math.pi * (seat_position + 2 - self.seat_position) / SEAT_COUNT
+            base_x = cx + rx * math.cos(theta)
+            base_y = cy + ry * math.sin(theta)
+
+            # clear face-down sprites, create face-up ones
+            if seat_position in self.other_hands:
+                self.other_hands[seat_position].clear()
+            revealed_hand = arcade.SpriteList()
+
+            for i, card_str in enumerate(cards):
+                value, _, suit = card_str.partition(" of ")
+                card = Card(suit, value, CARD_SCALE)
+                
+                # Position the card
+                card.center_x = base_x + i * space_offset
+                card.center_y = base_y
+                if i == 0:
+                    card.center_y = base_y + 30
+                
+                revealed_hand.append(card)
+        
+            # Replace the face-down cards with face-up cards
+            self.other_hands[seat_position] = revealed_hand
+            
+            print(f"Revealed hand for seat {seat_position}: {cards}")
+
 
     # Card dealing animation
     def display_community_cards(self, cards):
@@ -606,6 +651,13 @@ class PokerGameClient(arcade.Window):
             while self.incoming_community_cards:
                 cards = self.incoming_community_cards.pop(0)
                 self.display_community_cards(cards)
+        
+        # Process revealed cards
+        with self.reveal_lock:
+            while self.incoming_reveals:
+                hands_data = self.incoming_reveals.pop(0)
+                self.reveal_all_hands(hands_data)
+
 
         self.update_animations()
 
