@@ -16,7 +16,7 @@ app = Flask(__name__)
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet",
+    #async_mode="eventlet",
     ping_interval=10,   # server pings every 10s
     ping_timeout=20,
 )  # allow external connections

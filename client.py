@@ -16,7 +16,7 @@ from game import PokerGame
 
 
 SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
+SCREEN_HEIGHT = 650
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
@@ -82,6 +82,12 @@ class PokerGameClient(arcade.Window):
         # List for dealing animations
         self.deal_animations = []
 
+        # Background music
+        self.background_music = None
+        self.music_player = None
+        # Card music
+        self.card_flip_sound = None
+
         # Networking
         # self.sio = socketio.Client()
         self.sio = socketio.Client(
@@ -130,10 +136,38 @@ class PokerGameClient(arcade.Window):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
         self.setup_ui()
+        self.setup_music()
 
+    # Load and play background music
+    def setup_music(self):
+        try:
+            # BACKGROUND
+            # load in background music file
+            self.background_music = arcade.load_sound("sounds/lounge-jazz-elevator-music.mp3")
+            # play music on loop w/ volume
+            self.music_player = arcade.play_sound(
+                self.background_music,
+                volume=0.1,
+                loop=True
+            )
+            print("Background Music has started")
+
+
+            # CARD FLIP
+            # Load card flip sound file
+            self.card_flip_sound = arcade.load_sound("sounds/flipcard1.mp3")
+            # We'll play this sound later
+            print("Card flip sound loaded")
+
+        except Exception as e:
+            print(f"Count not load music fully. Exception: {e}")
     # Cleanup for disconnects
     def on_close(self):
         try:
+            # stop music if currently playing
+            if self.music_player:
+                arcade.stop_sound(self.music_player)
+
             if self.sio.connected:
                 try:
                     self.sio.emit("client_exit", {})
@@ -436,7 +470,7 @@ class PokerGameClient(arcade.Window):
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
     # -------------------- ANIMATION --------------------
-    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.3):
+    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.3, play_sound=False):
         start_x, start_y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120
         sprite.center_x, sprite.center_y = start_x, start_y
 
@@ -449,6 +483,8 @@ class PokerGameClient(arcade.Window):
             "start_time": time.time() + delay,
             "duration": duration,
             "done": False,
+            "play_sound": play_sound,
+            "sound_played": False
         }
         self.deal_animations.append(anim)
 
@@ -463,6 +499,12 @@ class PokerGameClient(arcade.Window):
             if now < anim["start_time"]:
                 still_running.append(anim)
                 continue
+            
+            # Play sound when animation starts 
+            if anim.get("play_sound") and not anim.get("sound_played"):
+                if self.card_flip_sound:
+                    arcade.play_sound(self.card_flip_sound, volume=1.0, speed=1.5)
+                anim["sound_played"] = True
 
             # already finished
             if anim.get("done"):
@@ -504,6 +546,9 @@ class PokerGameClient(arcade.Window):
 
             self.hand_cards.append(card)
 
+            # play card flip sound
+            if self.card_flip_sound:
+                arcade.play_sound(self.card_flip_sound, volume=1.0)
             # Animate the deal from the deck to the player's hand
             end_pos = (start_x + i * 100, y + 50)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
@@ -526,11 +571,13 @@ class PokerGameClient(arcade.Window):
                 continue
             self.community_cards.append(card)
 
+
             end_pos = (308 + i * (CARD_WIDTH + gap), y)
             if i <= 2:
-                self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.3)
+                self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.4, play_sound=True)
             else:
-                self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
+                self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3, play_sound=True)
+
 
 
     # -------------------- UPDATE --------------------
