@@ -591,7 +591,7 @@ class PokerGameClient(arcade.Window):
                 card.center_x = base_x + i * space_offset
                 card.center_y = base_y
                 if i == 0:
-                    card.center_y = base_y + 30
+                    card.center_y = base_y - 10
                 
                 revealed_hand.append(card)
         
