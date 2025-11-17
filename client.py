@@ -576,7 +576,6 @@ class PokerGameClient(arcade.Window):
         cycle_duration = 1.0 / 3.0
 
         if progress < 1.0:
-            x=0
             cycle_progress = (progress % cycle_duration) / cycle_duration
             cycle_number = int(progress / cycle_duration)
 
