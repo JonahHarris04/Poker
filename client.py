@@ -606,7 +606,7 @@ class PokerGameClient(arcade.Window):
     def shuffle_apart(self, progress, original_x, original_y):
         """Move deck halves apart"""
         for i, sprite in enumerate(self.deck_back_sprites):
-            if i < len(self.deck_back_sprites) / 2:
+            if i % 2 == 0:#i < len(self.deck_back_sprites) / 2:
                 # Left half - move left
                 sprite.center_x = original_x - 60 * progress
                 #sprite.angle = -10 * progress
