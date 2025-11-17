@@ -712,7 +712,6 @@ class PokerGameClient(arcade.Window):
 
     # Card dealing animation
     def display_community_cards(self, cards):
-        self.community_cards = arcade.SpriteList()
         gap = 18
         y = self.table_center_y
         deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120 #deck origin point

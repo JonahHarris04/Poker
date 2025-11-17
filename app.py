@@ -232,12 +232,6 @@ def progress_betting_round():
         #
         # # Notify all clients to clear hands and community cards
 
-        emit('round_reset')
-        for player in game.players.values():
-            socketio.emit('hand', [], room=player.uuid)
-            socketio.emit('community_cards', [], room=player.uuid)
-        handle_start_game(0)
-        print("Round has been reset.")
 
 
 
