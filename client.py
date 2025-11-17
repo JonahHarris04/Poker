@@ -40,6 +40,10 @@ SEAT_CLEARANCE = 35
 
 CARD_BACK_ASSET = ":resources:images/cards/cardBack_red2.png"
 
+HAND_RANKING_NUM_TO_STRING = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind", 5: "Straight",
+                              6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
+                              10: "Royal Flush"}
+
 game = PokerGame()
 
 class Phase(Enum):
@@ -292,7 +296,12 @@ class PokerGameClient(arcade.Window):
 
         @self.sio.on("round_reset")
         def on_round_reset(_data):
-            self.apply_phase(Phase.LOBBY)
+            self.community_cards = arcade.SpriteList()
+            self.hand_cards = arcade.SpriteList()
+            self.incoming_hands = []
+            self.incoming_community_cards = []
+
+
 
         @self.sio.on("hand")
         def update_hand(hand_cards: list):
@@ -370,6 +379,8 @@ class PokerGameClient(arcade.Window):
 
             arcade.draw_text(f"My Chips: {my_chips}", 10, SCREEN_HEIGHT - 30, arcade.color.YELLOW, 18)
             arcade.draw_text(f"Pot: {pot_amount}", 10, SCREEN_HEIGHT - 60, arcade.color.ORANGE, 18)
+
+            arcade.draw_text(f"Hand rank: {HAND_RANKING_NUM_TO_STRING[my_player['hand_rank']]}", 10, SCREEN_HEIGHT - 90, arcade.color.BLUE_GREEN, 18)
 
     # render the player name at each stool with the client player localized to the bottom.
     def draw_players_around_table(self):
@@ -518,6 +529,7 @@ class PokerGameClient(arcade.Window):
 
     # Card dealing animation
     def display_community_cards(self, cards):
+        self.community_cards = arcade.SpriteList()
         gap = 18
         y = self.table_center_y
         deck_x, deck_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2  # SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120 #deck origin point

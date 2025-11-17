@@ -16,9 +16,9 @@ app = Flask(__name__)
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet",
-    ping_interval=10,   # server pings every 10s
-    ping_timeout=20,
+    # async_mode="eventlet",
+    # ping_interval=10,   # server pings every 10s
+    # ping_timeout=20,
 )  # allow external connections
 
 # Single game instance
@@ -191,7 +191,7 @@ def progress_betting_round():
         game.move_to_next_street()
         # Send newly dealt community cards only (keeps same behavior as before)
         emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
-
+        game.assign_hand_ranking()
         # Broadcast updated game state
         emit('game_state', game.serialize_game_state(), broadcast=True)
 
@@ -201,6 +201,7 @@ def progress_betting_round():
 
     else:
         # Showdown logic (placeholder)
+        game.assign_hand_ranking()
         best_rank, winning_players = game.rank_all_player_hands()
         print(f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}')
         if len(winning_players) < 1:
@@ -209,12 +210,25 @@ def progress_betting_round():
             game.pot.payout_single(winning_players[0])
         else:
             game.pot.payout_split_pot(winning_players)
-        game.reset_round()
 
         message = f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}'
         emit('bet_message', message, broadcast=True)
         emit('message', "Round over! Showdown now.", broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
+
+        # # emit('round_reset')
+        # # game.reset_round()
+        #
+        # # Notify all clients to clear hands and community cards
+
+        emit('round_reset')
+        for player in game.players.values():
+            socketio.emit('hand', [], room=player.uuid)
+            socketio.emit('community_cards', [], room=player.uuid)
+        handle_start_game(0)
+        print("Round has been reset.")
+
+
 
 
 
@@ -252,15 +266,16 @@ def handle_river_request(_):
     emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
 
 
-@socketio.on('reset_round')
-def handle_reset_round(_):
-    game.reset_round()
-    print("Round has been reset.")
-
-    # Notify all clients to clear hands and community cards
-    for player in game.players.values():
-        socketio.emit('hand', [], room=player.uuid)
-    emit('community_cards', [], broadcast=True)
+# @socketio.on('round_reset')
+# def handle_reset_round(_):
+#     game.reset_round()
+#     print("Round has been reset.")
+#
+#     # Notify all clients to clear hands and community cards
+#     for player in game.players.values():
+#         socketio.emit('hand', [], room=player.uuid)
+#     emit('community_cards', [], broadcast=True)
+#     emit('round_reset')
 
 
 if __name__ == "__main__":
