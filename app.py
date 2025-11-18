@@ -27,10 +27,43 @@ game = PokerGame()
 player_counter = 0
 
 # Helper function for when it is a player's turn
-def send_turn_prompt(player):
+def send_turn_prompt(player_or_uuid):
+    # Accept either a Player object or a UUID string
+    if isinstance(player_or_uuid, str):
+        player = game.players.get(player_or_uuid)
+    else:
+        player = player_or_uuid
+
+    if not player:
+        print("[TURN] Tried to prompt non-existent player:", player_or_uuid)
+        return
+
     print(f"[TURN] Prompting: {player.name} ({player.uuid})")
-    socketio.emit('your_turn', {"message": "It's your turn!"}, room=player.uuid)
-    socketio.emit('available_actions', {"actions": game.get_available_actions(player.uuid)}, room=player.uuid)
+
+    # Acting player: turn message + allowed actions
+    socketio.emit(
+        'your_turn',
+        {"message": "It's your turn!"},
+        room=player.uuid
+    )
+
+    actions = game.get_available_actions(player.uuid)
+
+    socketio.emit(
+        'available_actions',
+        {"actions": actions},
+        room=player.uuid
+    )
+
+    # Everyone else: explicitly grey out buttons
+    for p in game.players.values():
+        if p.uuid == player.uuid:
+            continue
+        socketio.emit(
+            'available_actions',
+            {"actions": []},
+            room=p.uuid
+        )
 
 
 # Broadcast entire game state to all players
@@ -122,16 +155,25 @@ def handle_start_game(_):
     send_turn_prompt(current_player)
 
 @socketio.on('disconnect')
-def handle_disconnect():
+def handle_disconnect(reason = None):
     sid = request.sid
     print(f"Player disconnected: {sid}")
 
     result = game.on_disconnect(sid)
 
-    # You confirmed this message was showing before
     emit('message', "A player has disconnected.", broadcast=True)
 
-    emit('player_list', [p.to_dict() for p in game.players.values()], broadcast=True)
+    player_list_payload = [
+        {
+            "uuid": p.uuid,
+            "name": p.name,
+            "seat_position": getattr(p, "seat_position", None),
+            "money_count": getattr(p, "chips", 0),
+            "ready": getattr(p, "ready", False),
+        }
+        for p in game.players.values()
+    ]
+    emit('player_list', player_list_payload, broadcast=True)
 
     if result.get("ended_round"):
         emit('message', "Round ended due to disconnect (not enough players).", broadcast=True)
@@ -141,27 +183,21 @@ def handle_disconnect():
         emit('game_state', game.serialize_game_state(), broadcast=True)
         return
 
-    next_uuid = result.get("next_uuid")
-    actor = None
-
-    if next_uuid and next_uuid in game.players:
-        actor = game.players[next_uuid]
-    else:
-        # Fallback #1: whoever currently holds the turn after index fix-up
+    if result.get("ended_round") == False:
+        print("DEBUGGING DEBUGGING3")
         actor = game.current_player()
-        # Fallback #2: if current is invalid (folded/zero chips/None), advance once
         if not actor or actor.folded or actor.chips == 0:
             actor = game.advance_turn()
 
-    if actor:
-        # guarantee a fresh prompt so the client updates buttons
-        send_turn_prompt(actor)
+        print(f"[DISCONNECT] Next actor after disconnect: {actor.uuid if actor else None}")
+        if actor:
+            send_turn_prompt(actor)
 
     emit('game_state', game.serialize_game_state(), broadcast=True)
 
 @socketio.on('client_exit')
 def handle_client_exit(_=None):
-    return handle_disconnect()
+    handle_disconnect()
 
 
 @socketio.on('player_action')
@@ -173,6 +209,12 @@ def handle_action(data):
     if not game.round_active:
         emit('error_message', {"message": "No active round."}, to=uuid)
         return
+
+    # # Block player from acting if not their turn
+    # current = game.current_player()
+    # if not current or current.uuid != uuid:
+    #     emit('error_message', {"message": "It is not your turn."}, to=uuid)
+    #     return
 
     ok, msg = game.apply_action(uuid, action, amount)
     if not ok:
@@ -187,6 +229,8 @@ def handle_action(data):
         nxt = game.advance_turn()
         if nxt:
             send_turn_prompt(nxt)
+        # Send game state on every action instead of after each deal
+        broadcast_game_state()
 
 
 def progress_betting_round():

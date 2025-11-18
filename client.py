@@ -125,6 +125,11 @@ class PokerGameClient(arcade.Window):
         self.phase = Phase.LOBBY
 
         self.current_game_state = None
+        # Used for greying buttons
+        self.is_my_turn = False
+        # Used for custom betting
+        self.bet_amount_input = None
+
 
     def setup(self):
         self.register_socket_events()
@@ -137,12 +142,25 @@ class PokerGameClient(arcade.Window):
             if self.sio.connected:
                 try:
                     self.sio.emit("client_exit", {})
-                    time.sleep(0.1)  # let it flush
+                    time.sleep(0.1)
                 except Exception:
                     pass
                 self.sio.disconnect()
         finally:
             super().on_close()
+
+    # Helper for custom betting
+    def get_bet_amount(self) -> int:
+        """Return a sane integer bet amount from the input box."""
+        if not self.bet_amount_input:
+            return 10
+        try:
+            amt = int(self.bet_amount_input.text)
+        except ValueError:
+            amt = 10
+        if amt <= 0:
+            amt = 10
+        return amt
 
     # -------------------- UI --------------------
     def setup_ui(self):
@@ -189,6 +207,9 @@ class PokerGameClient(arcade.Window):
         self.raise_button = gui.UIFlatButton(text="Raise", width=140)
         self.call_button = gui.UIFlatButton(text="Call", width=140)
 
+        # Input Text box for betting amounts
+        self.bet_amount_input = gui.UIInputText(width=80, text="10")
+
         @self.check_button.event("on_click")
         def _on_check_click(event):
             self.sio.emit("player_action", {"action": "check"})
@@ -197,10 +218,14 @@ class PokerGameClient(arcade.Window):
             self.sio.emit("player_action", {"action": "fold"})
         @self.bet_button.event("on_click")
         def _on_bet_click(event):
-            self.sio.emit("player_action", {"action": "bet", "amount": 10})
+            amount =  self.get_bet_amount()
+            self.set_action_buttons([])
+            self.sio.emit("player_action", {"action": "bet", "amount": amount})
         @self.raise_button.event("on_click")
         def _on_raise_click(event):
-            self.sio.emit("player_action", {"action": "raise", "amount": 10})
+            amount = self.get_bet_amount()
+            self.set_action_buttons([])
+            self.sio.emit("player_action", {"action": "raise", "amount": amount})
         @self.call_button.event("on_click")
         def _on_call_click(event):
             self.sio.emit("player_action", {"action": "call"})
@@ -210,6 +235,7 @@ class PokerGameClient(arcade.Window):
         self.right_column.add(self.bet_button)
         self.right_column.add(self.call_button)
         self.right_column.add(self.raise_button)
+        self.right_column.add(self.bet_amount_input)
         self.action_row.add(self.left_column)
         self.action_row.add(self.right_column)
 
@@ -239,6 +265,8 @@ class PokerGameClient(arcade.Window):
         else:
             self.set_group_visible(self.start_box, False)
             self.set_group_visible(self.action_row, True)
+            # starts with all buttons greyed out on new hand
+            self.set_action_buttons([])
         self.update_buttons()
 
     def update_buttons(self):
@@ -258,6 +286,10 @@ class PokerGameClient(arcade.Window):
         self.bet_button.disabled = "bet" not in allowed
         self.raise_button.disabled = "raise" not in allowed
         self.call_button.disabled = "call" not in allowed
+
+        # Can only put custom amount if applicable
+        if self.bet_amount_input:
+            self.bet_amount_input.disabled = not (("bet" in allowed) or ("raise" in allowed))
 
     # -------------------- SOCKET --------------------
     def register_socket_events(self):
@@ -288,6 +320,9 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("round_started")
         def on_round_started(_data):
             self.apply_phase(Phase.IN_HAND)
+            # Grey out all buttons
+            self.is_my_turn = False
+            self.set_action_buttons([])
 
         @self.sio.on("round_reset")
         def on_round_reset(_data):
@@ -303,11 +338,14 @@ class PokerGameClient(arcade.Window):
 
         @self.sio.on("your_turn")
         def your_turn(data):
+            print("[CLIENT] your_turn:", data)
             self.status_text = data["message"]
+            self.is_my_turn = True
 
         @self.sio.on("available_actions")
         def available_actions(_):
             acts = _.get("actions", [])
+            print("[CLIENT] available_actions:", acts)
             self.set_action_buttons(acts)
 
         @self.sio.on("community_cards")
@@ -327,6 +365,21 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("game_state")
         def on_game_state(state):
             self.current_game_state = state
+
+            my_uuid = self.sio.get_sid()
+            current_turn = state.get("current_turn")
+            self.is_my_turn = (current_turn == my_uuid)
+
+            # self.current_game_state = state
+            #
+            # # Determine if it is a player's turn
+            # my_uuid = self.sio.get_sid()
+            # current_turn = state.get("current_turn")
+            # self.is_my_turn = (current_turn == my_uuid)
+            #
+            # # If it's not our turn and we're in a hand grey everything out
+            # if self.phase == Phase.IN_HAND and not self.is_my_turn:
+            #     self.set_action_buttons([])
 
     def connect_to_server(self):
         try:
@@ -454,7 +507,7 @@ class PokerGameClient(arcade.Window):
 
 
     def update_animations(self):
-        """Advance and apply any active deal animations. Call this from on_update()."""
+        """Advancex and apply any active deal animations. Call this from on_update()."""
         now = time.time()
         still_running = []
 
