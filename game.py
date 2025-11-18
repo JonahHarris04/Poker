@@ -339,7 +339,7 @@ class PokerGame:
 
         # If 0 or 1 active player, round is over
         if len(active) <= 1:
-            self.street = "showdown"
+            self.street = "river"
             return True
 
         # Everyone has acted
