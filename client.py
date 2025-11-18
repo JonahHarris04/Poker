@@ -110,6 +110,8 @@ class PokerGameClient(arcade.Window):
         self.music_player = None
         # Card music
         self.card_flip_sound = None
+        self.card_shuffle_sound = None
+        self.shuffle_sound_played = False
 
         # Networking
         # self.sio = socketio.Client()
@@ -185,6 +187,11 @@ class PokerGameClient(arcade.Window):
             self.card_flip_sound = arcade.load_sound("sounds/flipcard1.mp3")
             # We'll play this sound later
             print("Card flip sound loaded")
+
+            # CARD SHUFFLE
+            # Load shuffle sound file
+            self.card_shuffle_sound = arcade.load_sound("sounds/cards-being-shuffled.mp3")
+            print("Card shuffle sound loaded")
 
         except Exception as e:
             print(f"Count not load music fully. Exception: {e}")
@@ -529,6 +536,7 @@ class PokerGameClient(arcade.Window):
             "done": False,
             "play_sound": play_sound,
             "sound_played": False
+
         }
         self.deal_animations.append(anim)
 
@@ -585,6 +593,7 @@ class PokerGameClient(arcade.Window):
             self.shuffle_animation_active = True
             self.shuffle_start_time = time.time()
             self.shuffle_complete = False
+            self.shuffle_sound_played = False
 
         # If no active animation, stop
         if not self.shuffle_animation_active:
@@ -597,6 +606,12 @@ class PokerGameClient(arcade.Window):
 
         original_x = SCREEN_WIDTH / 2
         original_y = SCREEN_HEIGHT / 2 + 120
+
+
+        # play shuffle music
+        if self.card_shuffle_sound and not self.shuffle_sound_played:
+            arcade.play_sound(self.card_shuffle_sound, volume=1.0)
+            self.shuffle_sound_played = True
 
         # three cycles, each is 1/3 of total time
         cycle_duration = 1.0 / 3.0
@@ -640,7 +655,7 @@ class PokerGameClient(arcade.Window):
                 sprite.center_x = original_x + 60 * progress
                 #sprite.angle = 10 * progress
             sprite.center_y = original_y + i * 2
-    
+
     def shuffle_together(self, progress, original_x, original_y):
         """Bring deck halves back together"""
         for i, sprite in enumerate(self.deck_back_sprites):
@@ -655,6 +670,7 @@ class PokerGameClient(arcade.Window):
                 sprite.center_x = start_x - 60 * progress
                 #sprite.angle = 10 * (1 - progress)
             sprite.center_y = original_y + i * 2
+
 
     # -------------------- DISPLAY CARDS --------------------
     def display_hand(self, cards):
@@ -701,6 +717,10 @@ class PokerGameClient(arcade.Window):
                 self.other_hands[seat_position].clear()
             revealed_hand = arcade.SpriteList()
 
+            # play card flip sound
+            if self.card_flip_sound:
+                arcade.play_sound(self.card_flip_sound, volume=1.0)
+
             for i, card_str in enumerate(cards):
                 value, _, suit = card_str.partition(" of ")
                 card = Card(suit, value, CARD_SCALE)
@@ -734,7 +754,6 @@ class PokerGameClient(arcade.Window):
             if already_dealt:
                 continue
             self.community_cards.append(card)
-
 
             end_pos = (308 + i * (CARD_WIDTH + gap), y)
             if i <= 2:
