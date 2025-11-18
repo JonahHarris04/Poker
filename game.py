@@ -61,6 +61,9 @@ class PokerGame:
 
     # -------------------- Round Management --------------------
     def start_round(self):
+        for player in self.players.values():
+            player.reset_for_round()
+
         self.deck = deck.Deck()
         self.deck.shuffle()
         self.pot.clear_pot()
@@ -80,7 +83,7 @@ class PokerGame:
 
         # Deal 2 cards to each player
         for player in self.players.values():
-            player.reset_for_round()
+            # player.reset_for_round()
             player.receive_card(self.deck.deal(2))
             # Simple ante
             ante = 10
@@ -90,6 +93,7 @@ class PokerGame:
             player.acted_this_round = False
 
     def reset_round(self):
+
         self.round_active = False
         self.deck = deck.Deck()
         self.deck.shuffle()
@@ -98,9 +102,8 @@ class PokerGame:
         self.turn_order = list(self.players.keys())
         self.current_turn_index = 0
         self.last_aggressor = None
-        for player in self.players.values():
-            player.reset_for_round()
-            player.acted_this_round = False
+        self.street = "preflop"
+        self.start_round()
 
     # Disconnect helper
     def on_disconnect(self, uuid):
@@ -185,10 +188,6 @@ class PokerGame:
             player.set_hand_rank(rankings.rank_hand(player.hand + self.community_cards))
 
     def rank_all_player_hands(self):  # TODO: make less stupid / complex
-        # eventually adding_hand_rankings will be called after each new community card so below is redundant
-        for player in self.players.values():
-            player.set_hand_rank(rankings.rank_hand(player.hand + self.community_cards))
-
         winning_players = []
         current_best_rank = 0
         high_card_of_current_best = 0
@@ -335,7 +334,7 @@ class PokerGame:
 
         # If 0 or 1 active player, round is over
         if len(active) <= 1:
-            self.street = "showdown"
+            self.street = "river"
             return True
 
         # Everyone has acted
@@ -413,6 +412,7 @@ class PokerGame:
                     "name": p.name,
                     "chips": p.chips,
                     "folded": p.folded,
+                    "hand_rank": p.hand_rank[0],
                     "contribution": self.street_contributions.get(p.uuid, 0)
                 } for p in self.players.values()
             ],

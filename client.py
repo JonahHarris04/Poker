@@ -11,8 +11,11 @@ import time
 import arcade
 import socketio
 import arcade.gui as gui
+
+import deck
 from Card import Card
 from game import PokerGame
+import random
 
 
 SCREEN_WIDTH = 1024
@@ -39,6 +42,10 @@ STOOL_RING_THICKNESS = 3
 SEAT_CLEARANCE = 35
 
 CARD_BACK_ASSET = ":resources:images/cards/cardBack_red2.png"
+
+HAND_RANKING_NUM_TO_STRING = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind", 5: "Straight",
+                              6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
+                              10: "Royal Flush"}
 
 game = PokerGame()
 
@@ -82,6 +89,20 @@ class PokerGameClient(arcade.Window):
         # List for dealing animations
         self.deal_animations = []
 
+        # shuffle animation state
+        self.shuffle_animation_active = False
+        self.shuffle_start_time = 0
+        self.shuffle_duration = 2.0
+        self.shuffle_complete = False
+        self.pending_hand = None
+        self.pending_community_cards = None
+
+        # Background music
+        self.background_music = None
+        self.music_player = None
+        # Card music
+        self.card_flip_sound = None
+
         # Networking
         # self.sio = socketio.Client()
         self.sio = socketio.Client(
@@ -95,17 +116,21 @@ class PokerGameClient(arcade.Window):
 
         # GUI
         self.status_text = "Not Connected"
+        self.betting_text = "No Current Bet"
         self.player_name = "Player"
         self.seat_position = 0
         self.player_list = []
         self.lobby = []
         self.all_ready = False
         self.is_ready = False
+        self.game_started = False
 
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
         self.incoming_community_cards = []
         self.community_lock = threading.Lock()
+        self.incoming_reveals = []
+        self.reveal_lock = threading.Lock()
 
         self.ui = gui.UIManager()
         self.ready_button = None
@@ -135,10 +160,39 @@ class PokerGameClient(arcade.Window):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
         self.setup_ui()
+        self.setup_music()
+
+    # Load and play background music
+    def setup_music(self):
+        try:
+            # BACKGROUND
+            # load in background music file
+            self.background_music = arcade.load_sound("sounds/lounge-jazz-elevator-music.mp3")
+            # play music on loop w/ volume
+            self.music_player = arcade.play_sound(
+                self.background_music,
+                volume=0.1,
+                loop=True
+            )
+            print("Background Music has started")
+
+
+            # CARD FLIP
+            # Load card flip sound file
+            self.card_flip_sound = arcade.load_sound("sounds/flipcard1.mp3")
+            # We'll play this sound later
+            print("Card flip sound loaded")
+
+        except Exception as e:
+            print(f"Count not load music fully. Exception: {e}")
 
     # Cleanup for disconnects
     def on_close(self):
         try:
+            # stop music if currently playing
+            if self.music_player:
+                arcade.stop_sound(self.music_player)
+
             if self.sio.connected:
                 try:
                     self.sio.emit("client_exit", {})
@@ -320,13 +374,16 @@ class PokerGameClient(arcade.Window):
         @self.sio.on("round_started")
         def on_round_started(_data):
             self.apply_phase(Phase.IN_HAND)
+            self.shuffle_animation(start_new=True)
+            self.game_started = True
             # Grey out all buttons
             self.is_my_turn = False
             self.set_action_buttons([])
 
         @self.sio.on("round_reset")
-        def on_round_reset(_data):
-            self.apply_phase(Phase.LOBBY)
+        def on_round_reset(data=None):
+            # Defer sprite clearing until next frame ON THE MAIN THREAD
+            arcade.schedule_once(self.reset_round, 0)
 
         @self.sio.on("hand")
         def update_hand(hand_cards: list):
@@ -338,14 +395,12 @@ class PokerGameClient(arcade.Window):
 
         @self.sio.on("your_turn")
         def your_turn(data):
-            print("[CLIENT] your_turn:", data)
             self.status_text = data["message"]
             self.is_my_turn = True
 
         @self.sio.on("available_actions")
         def available_actions(_):
             acts = _.get("actions", [])
-            print("[CLIENT] available_actions:", acts)
             self.set_action_buttons(acts)
 
         @self.sio.on("community_cards")
@@ -353,10 +408,21 @@ class PokerGameClient(arcade.Window):
             with self.community_lock:
                 self.incoming_community_cards.append(cards)
 
+        @self.sio.on("reveal_hands")
+        def on_reveal_hands(data):
+            hands_data = data.get("hands", {})
+            with self.reveal_lock:
+                self.incoming_reveals.append(hands_data)
+
         @self.sio.on("message")
         def post_message(message: str):
             print(message)
             self.status_text = message
+
+        @self.sio.on("bet_message")
+        def post_bet_message(message: str):
+            print(message)
+            self.betting_text = message
 
         @self.sio.on("error_message")
         def post_error(data):
@@ -369,17 +435,6 @@ class PokerGameClient(arcade.Window):
             my_uuid = self.sio.get_sid()
             current_turn = state.get("current_turn")
             self.is_my_turn = (current_turn == my_uuid)
-
-            # self.current_game_state = state
-            #
-            # # Determine if it is a player's turn
-            # my_uuid = self.sio.get_sid()
-            # current_turn = state.get("current_turn")
-            # self.is_my_turn = (current_turn == my_uuid)
-            #
-            # # If it's not our turn and we're in a hand grey everything out
-            # if self.phase == Phase.IN_HAND and not self.is_my_turn:
-            #     self.set_action_buttons([])
 
     def connect_to_server(self):
         try:
@@ -404,6 +459,7 @@ class PokerGameClient(arcade.Window):
             hand.draw()
 
         arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
+        arcade.draw_text(self.betting_text, 10, 40, arcade.color.WHITE, 16)
         self.ui.draw()
 
         # players chip amount and pot amount
@@ -416,6 +472,8 @@ class PokerGameClient(arcade.Window):
 
             arcade.draw_text(f"My Chips: {my_chips}", 10, SCREEN_HEIGHT - 30, arcade.color.YELLOW, 18)
             arcade.draw_text(f"Pot: {pot_amount}", 10, SCREEN_HEIGHT - 60, arcade.color.ORANGE, 18)
+
+            arcade.draw_text(f"Hand rank: {HAND_RANKING_NUM_TO_STRING[my_player['hand_rank']]}", 10, SCREEN_HEIGHT - 90, arcade.color.BLUE_GREEN, 18)
 
     # render the player name at each stool with the client player localized to the bottom.
     def draw_players_around_table(self):
@@ -431,7 +489,6 @@ class PokerGameClient(arcade.Window):
             # Draw Player
             arcade.draw_text(player["name"], x - 30, y - 50, arcade.color.WHITE, 16)  # positioning could use some work
             # arcade.draw_text(player["money_count"], x - 30, y - 70, arcade.color.WHITE, 16)
-
 
     # helper function for update_player_list to draw facedown cards
     def create_facedown_hand_for_player(self, seat_position):
@@ -489,7 +546,7 @@ class PokerGameClient(arcade.Window):
             arcade.draw_line(x, y, x + leg_dx * leg_len, y + leg_dy * leg_len, STOOL_COLOR, 4)
 
     # -------------------- ANIMATION --------------------
-    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.3):
+    def enqueue_deal(self, sprite: arcade.Sprite, end_xy, duration=0.25, delay=0.3, play_sound=False):
         start_x, start_y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 120
         sprite.center_x, sprite.center_y = start_x, start_y
 
@@ -502,12 +559,13 @@ class PokerGameClient(arcade.Window):
             "start_time": time.time() + delay,
             "duration": duration,
             "done": False,
+            "play_sound": play_sound,
+            "sound_played": False
         }
         self.deal_animations.append(anim)
 
-
     def update_animations(self):
-        """Advancex and apply any active deal animations. Call this from on_update()."""
+        """Advance and apply any active deal animations. Call this from on_update()."""
         now = time.time()
         still_running = []
 
@@ -516,6 +574,12 @@ class PokerGameClient(arcade.Window):
             if now < anim["start_time"]:
                 still_running.append(anim)
                 continue
+
+            # Play sound when animation starts
+            if anim.get("play_sound") and not anim.get("sound_played"):
+                if self.card_flip_sound:
+                    arcade.play_sound(self.card_flip_sound, volume=1.0, speed=1.5)
+                anim["sound_played"] = True
 
             # already finished
             if anim.get("done"):
@@ -540,6 +604,89 @@ class PokerGameClient(arcade.Window):
         # keep only running animations
         self.deal_animations = still_running
 
+        # update shuffle anim if active
+        self.shuffle_animation()
+
+    def shuffle_animation(self, start_new=False):
+        '''
+        Shuffles the deck of cards at the beginning of each round (before cards handed out)
+        start_new: If set to True, starts new shuffle animation
+        '''
+        # Start new animation
+        if start_new:
+            self.shuffle_animation_active = True
+            self.shuffle_start_time = time.time()
+            self.shuffle_complete = False
+
+        # If no active animation, stop
+        if not self.shuffle_animation_active:
+            return
+
+        # Create progress to split up stages (split, combine)
+        now = time.time()
+        elapsed = now - self.shuffle_start_time
+        progress = elapsed / self.shuffle_duration
+
+        original_x = SCREEN_WIDTH / 2
+        original_y = SCREEN_HEIGHT / 2 + 120
+
+        # three cycles, each is 1/3 of total time
+        cycle_duration = 1.0 / 3.0
+
+        if progress < 1.0:
+            cycle_progress = (progress % cycle_duration) / cycle_duration
+            cycle_number = int(progress / cycle_duration)
+
+            if cycle_progress < 0.5:
+                split_progress = cycle_progress / 0.5
+                self.shuffle_apart(split_progress, original_x, original_y)
+            else:
+                combine_progress = (cycle_progress - 0.5) / 0.5
+                self.shuffle_together(combine_progress, original_x, original_y)
+
+        # we're done
+        else:
+            for i, sprite in enumerate(self.deck_back_sprites):
+                sprite.center_x = original_x
+                sprite.center_y = original_y + i * 2
+                #sprite.angle=0
+            self.shuffle_animation_active = False
+            self.shuffle_complete = True
+
+            if self.pending_hand is not None:
+                self.display_hand(self.pending_hand)
+                self.pending_hand = None
+            if self.pending_community_cards is not None:
+                self.display_community_cards(self.pending_community_cards)
+                self.pending_community_cards = None
+
+    def shuffle_apart(self, progress, original_x, original_y):
+        """Move deck halves apart"""
+        for i, sprite in enumerate(self.deck_back_sprites):
+            if i % 2 == 0:#i < len(self.deck_back_sprites) / 2:
+                # Left half - move left
+                sprite.center_x = original_x - 60 * progress
+                #sprite.angle = -10 * progress
+            else:
+                # Right half - move right
+                sprite.center_x = original_x + 60 * progress
+                #sprite.angle = 10 * progress
+            sprite.center_y = original_y + i * 2
+
+    def shuffle_together(self, progress, original_x, original_y):
+        """Bring deck halves back together"""
+        for i, sprite in enumerate(self.deck_back_sprites):
+            if i < len(self.deck_back_sprites) / 2:
+                # Left half - move from left back to center
+                start_x = original_x - 60
+                sprite.center_x = start_x + 60 * progress
+                #sprite.angle = -10 * (1 - progress)
+            else:
+                # Right half - move from right back to center
+                start_x = original_x + 60
+                sprite.center_x = start_x - 60 * progress
+                #sprite.angle = 10 * (1 - progress)
+            sprite.center_y = original_y + i * 2
 
     # -------------------- DISPLAY CARDS --------------------
     def display_hand(self, cards):
@@ -557,10 +704,51 @@ class PokerGameClient(arcade.Window):
 
             self.hand_cards.append(card)
 
+            # play card flip sound
+            if self.card_flip_sound:
+                arcade.play_sound(self.card_flip_sound, volume=1.0)
             # Animate the deal from the deck to the player's hand
             end_pos = (start_x + i * 100, y + 50)
             self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
 
+    def reveal_all_hands(self, all_hands_data):
+        cx, cy = self.table_center_x, self.table_center_y
+        rx = self.table_width / 2.5
+        ry = self.table_height / 2.5
+        space_offset = 28
+
+        for seat_position_str, cards in all_hands_data.items():
+            # skip your own seat
+            seat_position = int(seat_position_str)
+            if seat_position == self.seat_position:
+                continue
+
+            # Calculate position for this seat
+            theta = -2 * math.pi * (seat_position + 2 - self.seat_position) / SEAT_COUNT
+            base_x = cx + rx * math.cos(theta)
+            base_y = cy + ry * math.sin(theta)
+
+            # clear face-down sprites, create face-up ones
+            if seat_position in self.other_hands:
+                self.other_hands[seat_position].clear()
+            revealed_hand = arcade.SpriteList()
+
+            for i, card_str in enumerate(cards):
+                value, _, suit = card_str.partition(" of ")
+                card = Card(suit, value, CARD_SCALE)
+
+                # Position the card
+                card.center_x = base_x + i * space_offset
+                card.center_y = base_y
+                if i == 0:
+                    card.center_y = base_y - 10
+
+                revealed_hand.append(card)
+
+            # Replace the face-down cards with face-up cards
+            self.other_hands[seat_position] = revealed_hand
+
+            print(f"Revealed hand for seat {seat_position}: {cards}")
 
     # Card dealing animation
     def display_community_cards(self, cards):
@@ -579,12 +767,12 @@ class PokerGameClient(arcade.Window):
                 continue
             self.community_cards.append(card)
 
+
             end_pos = (308 + i * (CARD_WIDTH + gap), y)
             if i <= 2:
-                self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.3)
+                self.enqueue_deal(card, end_pos, duration=0.25, delay=i * 0.4, play_sound=True)
             else:
-                self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3)
-
+                self.enqueue_deal(card, end_pos, duration=0.25, delay=0.3, play_sound=True)
 
     # -------------------- UPDATE --------------------
     def on_update(self, delta_time):
@@ -603,15 +791,51 @@ class PokerGameClient(arcade.Window):
         with self.incoming_lock:
             while self.incoming_hands:
                 cards = self.incoming_hands.pop(0)
-                self.display_hand(cards)
+                if self.shuffle_animation_active and not self.shuffle_complete:
+                    self.pending_hand = cards
+                else:
+                    self.display_hand(cards)
 
         # Process community cards
         with self.community_lock:
             while self.incoming_community_cards:
                 cards = self.incoming_community_cards.pop(0)
-                self.display_community_cards(cards)
+                if self.shuffle_animation_active and not self.shuffle_complete:
+                    self.pending_community_cards = cards
+                else:
+                    self.display_community_cards(cards)
+
+        # Process revealed cards
+        with self.reveal_lock:
+            while self.incoming_reveals:
+                hands_data = self.incoming_reveals.pop(0)
+                self.reveal_all_hands(hands_data)
+
 
         self.update_animations()
+
+    def reset_round(self, delta_time):
+        print("Resetting round on main thread")
+
+        # Clear logical data
+        self.cards_dealt = False
+        self.pending_hand = None
+        self.pending_community_cards = None
+
+        # Clear main sprite lists
+        self.hand_cards.clear()
+        self.community_cards.clear()
+        self.deal_animations.clear()
+
+        # Clear other players hands
+        for seat_position in list(self.other_hands.keys()):
+            self.other_hands[seat_position].clear()
+            self.other_hands[seat_position] = arcade.SpriteList()
+
+        # Tell the server to start a new round after a few seconds
+        if self.game_started:
+            arcade.schedule_once(lambda dt: self.sio.emit("ready_for_next_round", {}), 1.5)
+
 
 def main():
     window = PokerGameClient()

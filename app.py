@@ -7,6 +7,7 @@ hand_ranking_weight_to_string = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4
                                  6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
                                  10: "Royal Flush"}
 
+import eventlet
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
@@ -125,6 +126,26 @@ def handle_ready(data):
     emit("lobby_state", lobby_state, broadcast=True)
 
 
+@socketio.on("ready_for_next_round")
+def handle_ready_for_next_round(_):
+    # Reset round state
+    game.reset_round()
+
+    print("New round started")
+    emit('round_started', {}, broadcast=True)
+
+    # Send each player their hand
+    for player in game.players.values():
+        socketio.emit('hand', [str(card) for card in player.hand], room=player.uuid)
+
+    game.assign_hand_ranking()
+    emit('game_state', game.serialize_game_state(), broadcast=True)
+
+    # Notify current player it's their turn
+    current_player = game.current_player()
+    send_turn_prompt(current_player)
+
+
 # Start a new round
 @socketio.on('start_game')
 def handle_start_game(_):
@@ -144,15 +165,18 @@ def handle_start_game(_):
     print("New round started")
 
     emit('round_started', {}, broadcast=True)
-    emit('game_state', game.serialize_game_state(), broadcast=True)
 
     # Send each player their hand
     for player in game.players.values():
         socketio.emit('hand', [str(card) for card in player.hand], room=player.uuid)
 
+    game.assign_hand_ranking()
+    emit('game_state', game.serialize_game_state(), broadcast=True)
+
     # Notify current player it's their turn
     current_player = game.current_player()
     send_turn_prompt(current_player)
+
 
 @socketio.on('disconnect')
 def handle_disconnect(reason = None):
@@ -210,18 +234,8 @@ def handle_action(data):
         emit('error_message', {"message": "No active round."}, to=uuid)
         return
 
-    # # Block player from acting if not their turn
-    # current = game.current_player()
-    # if not current or current.uuid != uuid:
-    #     emit('error_message', {"message": "It is not your turn."}, to=uuid)
-    #     return
-
     ok, msg = game.apply_action(uuid, action, amount)
-    if not ok:
-        emit('error_message', msg, to=uuid)
-        return
-
-    emit('message', msg, broadcast=True)
+    emit('bet_message', msg, broadcast=True)
 
     if game.is_betting_round_complete():
         progress_betting_round()
@@ -239,7 +253,7 @@ def progress_betting_round():
         game.move_to_next_street()
         # Send newly dealt community cards only (keeps same behavior as before)
         emit('community_cards', [str(c) for c in game.community_cards], broadcast=True)
-
+        game.assign_hand_ranking()
         # Broadcast updated game state
         emit('game_state', game.serialize_game_state(), broadcast=True)
 
@@ -249,6 +263,7 @@ def progress_betting_round():
 
     else:
         # Showdown logic (placeholder)
+        game.assign_hand_ranking()
         best_rank, winning_players = game.rank_all_player_hands()
         print(f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}')
         if len(winning_players) < 1:
@@ -257,12 +272,23 @@ def progress_betting_round():
             game.pot.payout_single(winning_players[0])
         else:
             game.pot.payout_split_pot(winning_players)
-        game.reset_round()
 
+        # flip over all cards visually
+        all_hands = {}
+        for player in game.players.values():
+            if not player.folded and len(player.hand) > 0:
+                all_hands[player.seat_position] = [str(card) for card in player.hand]
+        emit('reveal_hands', {"hands":all_hands}, broadcast=True)
+
+
+        message = f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}'
+        emit('bet_message', message, broadcast=True)
         emit('message', "Round over! Showdown now.", broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
 
-
+        # TODO: Add small break so players can see all flipped over cards before new round?
+        eventlet.sleep(2)
+        emit('round_reset', {}, broadcast=True)
 
 
 @socketio.on('request_flop')
@@ -296,17 +322,6 @@ def handle_river_request(_):
         return
     game.deal_river()
     emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
-
-
-@socketio.on('reset_round')
-def handle_reset_round(_):
-    game.reset_round()
-    print("Round has been reset.")
-
-    # Notify all clients to clear hands and community cards
-    for player in game.players.values():
-        socketio.emit('hand', [], room=player.uuid)
-    emit('community_cards', [], broadcast=True)
 
 
 if __name__ == "__main__":

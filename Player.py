@@ -11,7 +11,7 @@ class Player:
         self.chips = 1000
         self.seat_position = seat_position
         self.hand = []  # List of Cards of length 2
-        self.hand_rank = None
+        self.hand_rank = (1,0)
         self.seat_position_flag = seat_position_flag  # one of Dealer, Big Blind, Little Blind
         self.folded = False
         self.current_bet = 0
@@ -52,6 +52,7 @@ class Player:
         self.hand = []
         self.current_bet = 0
         self.folded = False
+        self.acted_this_round = False
 
     @property
     def ready(self):
