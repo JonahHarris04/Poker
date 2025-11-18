@@ -16,10 +16,18 @@ import deck
 from Card import Card
 from game import PokerGame
 import random
+import tkinter as tk
 
 
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
+def get_screen_resolution():
+    root = tk.Tk()
+    root.withdraw()
+    width = root.winfo_screenwidth()
+    height = root.winfo_screenheight()
+    root.destroy()
+    return width * 0.6, height * 0.6
+
+SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
