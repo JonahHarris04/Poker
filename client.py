@@ -11,13 +11,15 @@ import time
 import arcade
 import socketio
 import arcade.gui as gui
+
+import deck
 from Card import Card
 from game import PokerGame
 import random
 
 
 SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 650
+SCREEN_HEIGHT = 768
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
@@ -121,6 +123,7 @@ class PokerGameClient(arcade.Window):
         self.lobby = []
         self.all_ready = False
         self.is_ready = False
+        self.game_started = False
 
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
@@ -340,15 +343,12 @@ class PokerGameClient(arcade.Window):
         def on_round_started(_data):
             self.apply_phase(Phase.IN_HAND)
             self.shuffle_animation(start_new=True)
+            self.game_started = True
 
         @self.sio.on("round_reset")
-        def on_round_reset(_data):
-            self.community_cards = arcade.SpriteList()
-            self.hand_cards = arcade.SpriteList()
-            self.incoming_hands = []
-            self.incoming_community_cards = []
-
-
+        def on_round_reset(data=None):
+            # Defer sprite clearing until next frame ON THE MAIN THREAD
+            arcade.schedule_once(self.reset_round, 0)
 
         @self.sio.on("hand")
         def update_hand(hand_cards: list):
@@ -773,6 +773,32 @@ class PokerGameClient(arcade.Window):
 
 
         self.update_animations()
+
+    def reset_round(self, delta_time):
+        print("Resetting round on main thread")
+
+        # Clear logical data
+        self.cards_dealt = False
+        self.pending_hand = None
+        self.pending_community_cards = None
+
+        # Clear main sprite lists
+        self.hand_cards.clear()
+        self.community_cards.clear()
+        self.deal_animations.clear()
+
+        # Clear deck sprites
+        self.deck_back_sprites = arcade.SpriteList()
+
+        # Clear other players hands
+        for seat_position in list(self.other_hands.keys()):
+            self.other_hands[seat_position].clear()
+            self.other_hands[seat_position] = arcade.SpriteList()
+
+        # Tell the server to start a new round after a few seconds
+        if self.game_started:
+            arcade.schedule_once(lambda dt: self.sio.emit("ready_for_next_round", {}), 1.5)
+
 
 def main():
     window = PokerGameClient()

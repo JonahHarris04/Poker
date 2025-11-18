@@ -95,15 +95,14 @@ class PokerGame:
     def reset_round(self):
 
         self.round_active = False
-        # self.deck = deck.Deck()
-        # self.deck.shuffle()
+        self.deck = deck.Deck()
+        self.deck.shuffle()
         self.pot.clear_pot()
-        # self.community_cards.clear()
+        self.community_cards.clear()
         self.turn_order = list(self.players.keys())
         self.current_turn_index = 0
-        # self.last_aggressor = None
-        # self.street = "preflop"
-
+        self.last_aggressor = None
+        self.street = "preflop"
         self.start_round()
 
     # Disconnect helper

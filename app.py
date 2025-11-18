@@ -7,6 +7,7 @@ hand_ranking_weight_to_string = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4
                                  6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
                                  10: "Royal Flush"}
 
+import eventlet
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
@@ -92,6 +93,24 @@ def handle_ready(data):
     emit("lobby_state", lobby_state, broadcast=True)
 
 
+@socketio.on("ready_for_next_round")
+def handle_ready_for_next_round(_):
+    # Reset round state
+    game.reset_round()
+
+    print("New round started")
+    emit('round_started', {}, broadcast=True)
+    emit('game_state', game.serialize_game_state(), broadcast=True)
+
+    # Send each player their hand
+    for player in game.players.values():
+        socketio.emit('hand', [str(card) for card in player.hand], room=player.uuid)
+
+    # Notify current player it's their turn
+    current_player = game.current_player()
+    send_turn_prompt(current_player)
+
+
 # Start a new round
 @socketio.on('start_game')
 def handle_start_game(_):
@@ -120,6 +139,7 @@ def handle_start_game(_):
     # Notify current player it's their turn
     current_player = game.current_player()
     send_turn_prompt(current_player)
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -217,25 +237,16 @@ def progress_betting_round():
             if not player.folded and len(player.hand) > 0:
                 all_hands[player.seat_position] = [str(card) for card in player.hand]
         emit('reveal_hands', {"hands":all_hands}, broadcast=True)
-        
-        # TODO: Add small break so players can see all flipped over cards before new round?
 
-        game.reset_round()
 
         message = f'BEST HAND IS {hand_ranking_weight_to_string[best_rank]} -- {[player.name for player in winning_players]}'
         emit('bet_message', message, broadcast=True)
         emit('message', "Round over! Showdown now.", broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
 
-        # # emit('round_reset')
-        # # game.reset_round()
-        #
-        # # Notify all clients to clear hands and community cards
-
-
-
-
-
+        # TODO: Add small break so players can see all flipped over cards before new round?
+        eventlet.sleep(2)
+        emit('round_reset', {}, broadcast=True)
 
 
 @socketio.on('request_flop')
@@ -269,18 +280,6 @@ def handle_river_request(_):
         return
     game.deal_river()
     emit("community_cards", [str(card) for card in game.community_cards], broadcast=True)
-
-
-# @socketio.on('round_reset')
-# def handle_reset_round(_):
-#     game.reset_round()
-#     print("Round has been reset.")
-#
-#     # Notify all clients to clear hands and community cards
-#     for player in game.players.values():
-#         socketio.emit('hand', [], room=player.uuid)
-#     emit('community_cards', [], broadcast=True)
-#     emit('round_reset')
 
 
 if __name__ == "__main__":
