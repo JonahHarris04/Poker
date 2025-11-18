@@ -100,11 +100,13 @@ def handle_ready_for_next_round(_):
 
     print("New round started")
     emit('round_started', {}, broadcast=True)
-    emit('game_state', game.serialize_game_state(), broadcast=True)
 
     # Send each player their hand
     for player in game.players.values():
         socketio.emit('hand', [str(card) for card in player.hand], room=player.uuid)
+
+    game.assign_hand_ranking()
+    emit('game_state', game.serialize_game_state(), broadcast=True)
 
     # Notify current player it's their turn
     current_player = game.current_player()
@@ -130,11 +132,13 @@ def handle_start_game(_):
     print("New round started")
 
     emit('round_started', {}, broadcast=True)
-    emit('game_state', game.serialize_game_state(), broadcast=True)
 
     # Send each player their hand
     for player in game.players.values():
         socketio.emit('hand', [str(card) for card in player.hand], room=player.uuid)
+
+    game.assign_hand_ranking()
+    emit('game_state', game.serialize_game_state(), broadcast=True)
 
     # Notify current player it's their turn
     current_player = game.current_player()
