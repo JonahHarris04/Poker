@@ -199,7 +199,8 @@ class PokerGame:
         best_first_pair = 0
         best_second_pair = 0
 
-        for player in self.players.values():
+        list_of_eligible_players = [p for p in self.players.values() if not p.folded] # only poll from players that haven't folded
+        for player in list_of_eligible_players:
             player_hand_rank = player.hand_rank[0]
             player_high_cards = player.hand_rank[1]
             if player_hand_rank > current_best_rank:  # this player is the new current winner

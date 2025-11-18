@@ -390,7 +390,7 @@ class PokerGameClient(arcade.Window):
 
         @self.sio.on("error_message")
         def post_error(data):
-            self.status_text = f"Error: {data['message']}"
+            self.status_text = f"Error: {data}"
 
         @self.sio.on("game_state")
         def on_game_state(state):

@@ -195,7 +195,7 @@ def handle_action(data):
     amount = int(data.get('amount', 0))
 
     if not game.round_active:
-        emit('error_message', {"message": "No active round."}, to=uuid)
+        emit('error_message', "No active round.", to=uuid)
         return
 
     ok, msg = game.apply_action(uuid, action, amount)
