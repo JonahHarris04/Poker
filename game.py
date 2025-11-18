@@ -107,13 +107,9 @@ class PokerGame:
 
     # Disconnect helper
     def on_disconnect(self, uuid):
-        out = {"removed": False, "next_uuid": None, "ended_round": False}
+        out = {"removed": False, "ended_round": False}
         if uuid not in self.players:
             return out
-
-        was_current = False
-        if self.safe_has_turn():
-            was_current = (self.turn_order[self.current_turn_index] == uuid)
 
         # Remove per-street contribution
         self.street_contributions.pop(uuid, None)
@@ -122,53 +118,51 @@ class PokerGame:
         if uuid in self.turn_order:
             idx = self.turn_order.index(uuid)
             self.turn_order.pop(idx)
+
+            # If players are in the lobby
             if self.turn_order:
-                # IMPORTANT: only shift if removed index was strictly before current
+                # If current uuid index position is less than the current turn
+                # Decrement the current turn to the current uuid
                 if idx < self.current_turn_index:
                     self.current_turn_index -= 1
-                # clamp/wrap if we popped the last element
+
+                # If current turn index is outside the length of players in turn order
+                # Reset the current turn index to the start
                 if self.current_turn_index >= len(self.turn_order):
                     self.current_turn_index = 0
             else:
                 self.current_turn_index = 0
 
-        # Remove player record last
-        self.players.pop(uuid, None)
+        # Need to remove player from game as they've
+        # Only been removed from the turn order so far
+        self.remove_player(uuid)
         out["removed"] = True
 
+        # If round isn't active kill the game
         if not self.round_active:
             return out
 
-        # End hand if < 2 active players
-        if len(self.active_players()) < 2:
+        # If less than two active players reset the round
+        active = self.active_players()
+        if len(active) < 2:
+            # Not enough players to continue the hand
             self.reset_round()
             out["ended_round"] = True
-            return out
 
-        # Choose actor to prompt
-        if not self.turn_order:
-            return out  # defensive
-
-        if was_current:
-            # The next player slid into the same index; use them
-            actor = self.current_player()
-            if not actor or actor.folded or actor.chips == 0:
-                actor = self.advance_turn()
-        else:
-            actor = self.current_player()
-            if not actor or actor.folded or actor.chips == 0:
-                actor = self.advance_turn()
-
-        out["next_uuid"] = actor.uuid if actor else None
         return out
 
 
     # -------------------- Turn Management --------------------
     def current_player(self):
-        # Added safeguard
-        if not self.safe_has_turn():
-            return None
         return self.players.get(self.turn_order[self.current_turn_index])
+
+    # def has_player_acted_this_round(self, uuid):
+    #     curr = self.current_player()
+    #     if curr.acted_this_round:
+    #         return True
+    #     else:
+    #         return False
+
 
     def advance_turn(self):
         for _ in range(len(self.turn_order)):
@@ -178,13 +172,14 @@ class PokerGame:
                 return p
         return None
 
+    def advance_turn_by_1(self):
+        self.current_turn_index += 1
+
     # More disconnect helpers
     def active_players(self):
-        # not folded and has chips (your own definition of "active")
+        # not folded and has chips
         return [p for p in self.players.values() if not p.folded and p.chips > 0]
 
-    def safe_has_turn(self):
-        return bool(self.turn_order) and 0 <= self.current_turn_index < len(self.turn_order)
 
     # ------------------Game Logic Helpers--------------
 
@@ -400,6 +395,8 @@ class PokerGame:
         # If no one has bet price_to_call is zero
         elif price_to_call == 0:
             return ["check", "bet", "allin", "fold"]
+        # elif not self.players.get(self.turn_order[self.current_turn_index]):
+        #     return []
         else:
             actions = ["call", "allin", "fold"]
             # Hide raise if player can't do more than call
