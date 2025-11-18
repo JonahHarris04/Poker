@@ -788,7 +788,7 @@ class PokerGameClient(arcade.Window):
         self.deal_animations.clear()
 
         # Clear deck sprites
-        self.deck_back_sprites = arcade.SpriteList()
+        # self.deck_back_sprites = arcade.SpriteList()
 
         # Clear other players hands
         for seat_position in list(self.other_hands.keys()):
