@@ -83,7 +83,6 @@ class PokerGame:
 
         # Deal 2 cards to each player
         for player in self.players.values():
-            # player.reset_for_round()
             player.receive_card(self.deck.deal(2))
             # Simple ante
             ante = 10

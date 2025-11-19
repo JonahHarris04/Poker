@@ -208,7 +208,6 @@ def handle_disconnect(reason = None):
         return
 
     if result.get("ended_round") == False:
-        print("DEBUGGING DEBUGGING3")
         actor = game.current_player()
         if not actor or actor.folded or actor.chips == 0:
             actor = game.advance_turn()
