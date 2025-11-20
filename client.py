@@ -855,9 +855,7 @@ class PokerGameClient(arcade.Window):
         self.deal_animations.clear()
 
         # Clear other players hands
-        for seat_position in list(self.other_hands.keys()):
-            self.other_hands[seat_position].clear()
-            self.other_hands[seat_position] = arcade.SpriteList()
+        self.other_hands.clear()
 
         # Tell the server to start a new round after a few seconds
         if self.game_started:
