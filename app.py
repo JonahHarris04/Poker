@@ -131,6 +131,8 @@ def handle_ready_for_next_round(_):
     # Reset round state
     game.reset_round()
 
+    # Start round
+    game.start_round()
     print("New round started")
     emit('round_started', {}, broadcast=True)
 

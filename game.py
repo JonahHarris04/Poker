@@ -102,7 +102,6 @@ class PokerGame:
         self.current_turn_index = 0
         self.last_aggressor = None
         self.street = "preflop"
-        self.start_round()
 
     # Disconnect helper
     def on_disconnect(self, uuid):
