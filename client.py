@@ -861,7 +861,9 @@ class PokerGameClient(arcade.Window):
 
         # Tell the server to start a new round after a few seconds
         if self.game_started:
-            arcade.schedule_once(lambda dt: self.sio.emit("ready_for_next_round", {}), 1.5)
+            my_uuid = self.sio.get_sid()
+            if my_uuid == self.player_list[0]['uuid']:
+              arcade.schedule_once(lambda dt: self.sio.emit("ready_for_next_round", {}), 1.5)
 
 
 def main():
