@@ -247,7 +247,6 @@ def handle_action(data):
         # Send game state on every action instead of after each deal
         broadcast_game_state()
 
-
 def progress_betting_round():
     # Automatically move to next street or showdown
     if game.street != "river":

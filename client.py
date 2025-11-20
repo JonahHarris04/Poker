@@ -27,7 +27,7 @@ def get_screen_resolution():
     root.destroy()
     return width * 0.6, height * 0.6
 
-SCREEN_WIDTH, SCREEN_HEIGHT = 1040, 768
+SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 700
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
@@ -112,6 +112,7 @@ class PokerGameClient(arcade.Window):
         self.card_flip_sound = None
         self.card_shuffle_sound = None
         self.shuffle_sound_played = False
+        self.sound_enabled = True
 
         # Networking
         # self.sio = socketio.Client()
@@ -150,12 +151,15 @@ class PokerGameClient(arcade.Window):
         self.check_button = None
         self.raise_button = None
         self.call_button = None
+        self.sound_button = None
 
         self.anchor = None
         self.start_box = None
         self.action_row = None
+        self.audio_row = None
         self.left_column = None
         self.right_column = None
+        self.top_right_column = None
 
         self.phase = Phase.LOBBY
 
@@ -267,14 +271,19 @@ class PokerGameClient(arcade.Window):
 
         # Action buttons
         self.action_row = gui.UIBoxLayout(vertical=False, space_between=20)
+        self.audio_row = gui.UIBoxLayout()
         self.left_column = gui.UIBoxLayout(space_between=8)
         self.right_column = gui.UIBoxLayout(space_between=8)
+
+        self.top_right_column = gui.UIBoxLayout(space_between=8)
 
         self.check_button = gui.UIFlatButton(text="Check", width=140)
         self.fold_button = gui.UIFlatButton(text="Fold", width=140)
         self.bet_button = gui.UIFlatButton(text="Bet", width=140)
         self.raise_button = gui.UIFlatButton(text="Raise", width=140)
         self.call_button = gui.UIFlatButton(text="Call", width=140)
+
+        self.sound_button = gui.UIFlatButton(text="🔉", width=60, height=60)
 
         # Input Text box for betting amounts
         self.bet_amount_input = gui.UIInputText(width=80, text="10")
@@ -298,6 +307,22 @@ class PokerGameClient(arcade.Window):
         @self.call_button.event("on_click")
         def _on_call_click(event):
             self.sio.emit("player_action", {"action": "call"})
+        @self.sound_button.event("on_click")
+        def _on_sound_click(event):
+            # switch sound_enabled T->F or F->T
+            self.sound_enabled = not self.sound_enabled
+
+            if self.sound_enabled:
+                self.sound_button.text = "🔊"
+                if self.background_music and not self.music_player:
+                    self.music_player = arcade.play_sound(self.background_music, volume=0.1, loop=True)
+            else:
+                self.sound_button.text = "🔇"
+                if self.music_player:
+                    arcade.stop_sound(self.music_player)
+                    self.music_player = None
+
+            self.sio.emit("mute_action", {"action":"mute_or_on"})
 
         self.left_column.add(self.check_button)
         self.left_column.add(self.fold_button)
@@ -305,8 +330,10 @@ class PokerGameClient(arcade.Window):
         self.right_column.add(self.call_button)
         self.right_column.add(self.raise_button)
         self.right_column.add(self.bet_amount_input)
+        self.top_right_column.add(self.sound_button)
         self.action_row.add(self.left_column)
         self.action_row.add(self.right_column)
+        self.audio_row.add(self.top_right_column)
 
         self.ui.add(
             self.anchor.add(
@@ -317,6 +344,17 @@ class PokerGameClient(arcade.Window):
                 child=self.action_row
             )
         )
+
+        self.ui.add(
+            self.anchor.add(
+                anchor_x="right",
+                anchor_y="top",
+                align_x=-10,
+                align_y=-10,
+                child=self.audio_row
+            )
+        )
+        
 
         self.apply_phase(Phase.LOBBY)
 
@@ -593,7 +631,7 @@ class PokerGameClient(arcade.Window):
 
             # Play sound when animation starts
             if anim.get("play_sound") and not anim.get("sound_played"):
-                if self.card_flip_sound:
+                if self.card_flip_sound and self.sound_enabled:
                     arcade.play_sound(self.card_flip_sound, volume=1.0, speed=1.5)
                 anim["sound_played"] = True
 
@@ -649,7 +687,7 @@ class PokerGameClient(arcade.Window):
 
 
         # play shuffle music
-        if self.card_shuffle_sound and not self.shuffle_sound_played:
+        if self.card_shuffle_sound and not self.shuffle_sound_played and self.sound_enabled:
             arcade.play_sound(self.card_shuffle_sound, volume=1.0)
             self.shuffle_sound_played = True
 
@@ -729,7 +767,7 @@ class PokerGameClient(arcade.Window):
             self.hand_cards.append(card)
 
             # play card flip sound
-            if self.card_flip_sound:
+            if self.card_flip_sound and self.sound_enabled:
                 arcade.play_sound(self.card_flip_sound, volume=1.0)
             # Animate the deal from the deck to the player's hand
             end_pos = (start_x + i * 100, y + 50)
@@ -758,7 +796,7 @@ class PokerGameClient(arcade.Window):
             revealed_hand = arcade.SpriteList()
 
             # play card flip sound
-            if self.card_flip_sound:
+            if self.card_flip_sound and self.sound_enabled:
                 arcade.play_sound(self.card_flip_sound, volume=1.0)
 
             for i, card_str in enumerate(cards):
