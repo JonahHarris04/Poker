@@ -12,10 +12,8 @@ import arcade
 import socketio
 import arcade.gui as gui
 
-import deck
 from Card import Card
 from game import PokerGame
-import random
 import tkinter as tk
 
 
@@ -51,7 +49,8 @@ SEAT_CLEARANCE = 35
 
 CARD_BACK_ASSET = ":resources:images/cards/cardBack_red2.png"
 
-HAND_RANKING_NUM_TO_STRING = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind", 5: "Straight",
+HAND_RANKING_NUM_TO_STRING = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind",
+                              5: "Straight",
                               6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
                               10: "Royal Flush"}
 
@@ -246,11 +245,11 @@ class PokerGameClient(arcade.Window):
         self.start_button = gui.UIFlatButton(text="Start Game", width=160)
 
         @self.ready_button.event("on_click")
-        def _on_ready_click(event):
+        def _on_ready_click(_):
             self.sio.emit("ready", {"action": "toggle"})
 
         @self.start_button.event("on_click")
-        def _on_start_click(event):
+        def _on_start_click(_):
             if self.all_ready and len(self.lobby) >= 2:
                 self.sio.emit("start_game", {})
             else:
@@ -289,23 +288,23 @@ class PokerGameClient(arcade.Window):
         self.bet_amount_input = gui.UIInputText(width=80, text="10")
 
         @self.check_button.event("on_click")
-        def _on_check_click(event):
+        def _on_check_click(_):
             self.sio.emit("player_action", {"action": "check"})
         @self.fold_button.event("on_click")
-        def _on_fold_click(event):
+        def _on_fold_click(_):
             self.sio.emit("player_action", {"action": "fold"})
         @self.bet_button.event("on_click")
-        def _on_bet_click(event):
+        def _on_bet_click(_):
             amount =  self.get_bet_amount()
             self.set_action_buttons([])
             self.sio.emit("player_action", {"action": "bet", "amount": amount})
         @self.raise_button.event("on_click")
-        def _on_raise_click(event):
+        def _on_raise_click(_):
             amount = self.get_bet_amount()
             self.set_action_buttons([])
             self.sio.emit("player_action", {"action": "raise", "amount": amount})
         @self.call_button.event("on_click")
-        def _on_call_click(event):
+        def _on_call_click(_):
             self.sio.emit("player_action", {"action": "call"})
         @self.sound_button.event("on_click")
         def _on_sound_click(event):
@@ -383,7 +382,8 @@ class PokerGameClient(arcade.Window):
     # Helper function for enabling and disabling buttons based off turn and round status
     def set_action_buttons(self, actions):
         # disable all buttons
-        for b in [self.check_button, self.fold_button, self.bet_button, self.raise_button, self.call_button]:
+        for b in [self.check_button, self.fold_button,
+                  self.bet_button, self.raise_button, self.call_button]:
             b.disabled = True
             b.visible = True
         # Enable buttons based on
@@ -434,7 +434,7 @@ class PokerGameClient(arcade.Window):
             self.set_action_buttons([])
 
         @self.sio.on("round_reset")
-        def on_round_reset(data=None):
+        def on_round_reset(_):
             # Defer sprite clearing until next frame ON THE MAIN THREAD
             arcade.schedule_once(self.reset_round, 0)
 
@@ -526,7 +526,8 @@ class PokerGameClient(arcade.Window):
             arcade.draw_text(f"My Chips: {my_chips}", 10, SCREEN_HEIGHT - 30, arcade.color.YELLOW, 18)
             arcade.draw_text(f"Pot: {pot_amount}", 10, SCREEN_HEIGHT - 60, arcade.color.ORANGE, 18)
 
-            arcade.draw_text(f"Hand rank: {HAND_RANKING_NUM_TO_STRING[my_player['hand_rank']]}", 10, SCREEN_HEIGHT - 90, arcade.color.BLUE_GREEN, 18)
+            arcade.draw_text(f"Hand rank: {HAND_RANKING_NUM_TO_STRING[my_player['hand_rank']]}",
+                             10, SCREEN_HEIGHT - 90, arcade.color.BLUE_GREEN, 18)
 
     # render the player name at each stool with the client player localized to the bottom.
     def draw_players_around_table(self):
@@ -696,7 +697,6 @@ class PokerGameClient(arcade.Window):
 
         if progress < 1.0:
             cycle_progress = (progress % cycle_duration) / cycle_duration
-            cycle_number = int(progress / cycle_duration)
 
             if cycle_progress < 0.5:
                 split_progress = cycle_progress / 0.5
@@ -899,7 +899,7 @@ class PokerGameClient(arcade.Window):
         if self.game_started:
             my_uuid = self.sio.get_sid()
             if my_uuid == self.player_list[0]['uuid']:
-              arcade.schedule_once(lambda dt: self.sio.emit("ready_for_next_round", {}), 1.5)
+                arcade.schedule_once(lambda dt: self.sio.emit("ready_for_next_round", {}), 1.5)
 
 
 def main():

@@ -3,15 +3,16 @@ CS 3050 Poker Game - app.py
 Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
 """
 
-hand_ranking_weight_to_string = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind", 5: "Straight",
-                                 6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
-                                 10: "Royal Flush"}
 
 import eventlet
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
 from game import PokerGame
+
+hand_ranking_weight_to_string = {1: "High Card", 2: "One Pair", 3: "Two Pair", 4: "Three of a Kind", 5: "Straight",
+                                 6: "Flush", 7: "Full House", 8: "Four of a Kind", 9: "Straight Flush",
+                                 10: "Royal Flush"}
 
 app = Flask(__name__)
 socketio = SocketIO(
@@ -181,7 +182,7 @@ def handle_start_game(_):
 
 
 @socketio.on('disconnect')
-def handle_disconnect(reason = None):
+def handle_disconnect(_):
     sid = request.sid
     print(f"Player disconnected: {sid}")
 
@@ -209,7 +210,7 @@ def handle_disconnect(reason = None):
         emit('game_state', game.serialize_game_state(), broadcast=True)
         return
 
-    if result.get("ended_round") == False:
+    if result.get("ended_round") is False:
         actor = game.current_player()
         if not actor or actor.folded or actor.chips == 0:
             actor = game.advance_turn()
@@ -286,7 +287,6 @@ def progress_betting_round():
         emit('message', "Round over! Showdown now.", broadcast=True)
         emit('game_state', game.serialize_game_state(), broadcast=True)
 
-        # TODO: Add small break so players can see all flipped over cards before new round?
         eventlet.sleep(2.5)
         emit('round_reset', {}, broadcast=True)
 
