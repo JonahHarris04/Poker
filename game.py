@@ -26,6 +26,7 @@ class PokerGame:
         self.current_bet = 0
         self.street_contributions = {}
         self.minimum_raise = 0
+        self.maximum_bet = 990
         self.street = "preflop"  # preflop, flop, turn, river, showdown
         self.last_aggressor = None  # Last person to have set a new high
 
@@ -244,6 +245,11 @@ class PokerGame:
 
     # -------------------- Betting --------------------
     def apply_action(self, uuid, action, amount=0):
+        # determine maximum bet
+        for player in self.players.values():
+            if player.chips < self.maximum_bet:
+                self.maximum_bet = player.chips
+
         p = self.players.get(uuid)
         if not p or p.folded or p.chips == 0:
             return False, "Invalid player state."
@@ -283,6 +289,8 @@ class PokerGame:
                 return False, f"Minimum bet is {self.minimum_raise}."
             if amount > p.chips:
                 return False, "Not enough chips."
+            if amount > self.maximum_bet:
+                return False, "Bet is more than the least common denominator."
             p.chips -= amount
             self.pot.add_to_pot(amount)
             self.street_contributions[uuid] = my_contribution + amount
