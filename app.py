@@ -44,8 +44,8 @@ def send_turn_prompt(player_or_uuid):
     # Acting player: turn message + allowed actions
     socketio.emit(
         'your_turn',
-        {"message": "It's your turn!"},
-        room=player.uuid
+        {"message": f"It's {player.name}'s turn"},
+        room=None
     )
 
     actions = game.get_available_actions(player.uuid)
@@ -286,7 +286,7 @@ def progress_betting_round():
         emit('game_state', game.serialize_game_state(), broadcast=True)
 
         # TODO: Add small break so players can see all flipped over cards before new round?
-        eventlet.sleep(2)
+        eventlet.sleep(2.5)
         emit('round_reset', {}, broadcast=True)
 
 
