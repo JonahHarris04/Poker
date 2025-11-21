@@ -134,6 +134,7 @@ class PokerGameClient(arcade.Window):
         self.all_ready = False
         self.is_ready = False
         self.game_started = False
+        self.show_title_screen = True
 
         self.incoming_hands = []
         self.incoming_lock = threading.Lock()
@@ -151,6 +152,8 @@ class PokerGameClient(arcade.Window):
         self.raise_button = None
         self.call_button = None
         self.sound_button = None
+        self.placeholder_button = None
+        self.placeholder_button2 = None
 
         self.anchor = None
         self.start_box = None
@@ -281,6 +284,8 @@ class PokerGameClient(arcade.Window):
         self.bet_button = gui.UIFlatButton(text="Bet", width=140)
         self.raise_button = gui.UIFlatButton(text="Raise", width=140)
         self.call_button = gui.UIFlatButton(text="Call", width=140)
+        self.placeholder_button = gui.UIFlatButton(text="Place", width=140)
+        self.placeholder_button2 = gui.UIFlatButton(text="Place2", width=140)
 
         self.sound_button = gui.UIFlatButton(text="🔉", width=60, height=60)
 
@@ -323,6 +328,8 @@ class PokerGameClient(arcade.Window):
 
             self.sio.emit("mute_action", {"action":"mute_or_on"})
 
+        self.left_column.add(self.placeholder_button)
+        self.left_column.add(self.placeholder_button2)
         self.left_column.add(self.check_button)
         self.left_column.add(self.fold_button)
         self.right_column.add(self.bet_button)
@@ -429,6 +436,7 @@ class PokerGameClient(arcade.Window):
             self.apply_phase(Phase.IN_HAND)
             self.shuffle_animation(start_new=True)
             self.game_started = True
+            self.show_title_screen = False
             # Grey out all buttons
             self.is_my_turn = False
             self.set_action_buttons([])
@@ -499,6 +507,55 @@ class PokerGameClient(arcade.Window):
     # -------------------- DRAW --------------------
     def on_draw(self):
         self.clear()
+
+        # Title Screen
+        if self.show_title_screen:
+            # Simple dark background (override the table drawing)
+            arcade.draw_lbwh_rectangle_filled(
+                0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, arcade.color.DARK_GREEN
+            )
+
+            # Title
+            arcade.draw_text(
+                "CS 3050 Poker",
+                SCREEN_WIDTH // 2,
+                SCREEN_HEIGHT // 2 + 80,
+                arcade.color.WHITE,
+                48,
+                anchor_x="center",
+                anchor_y="center",
+            )
+
+            # Subtitle
+            arcade.draw_text(
+                "Texas Hold'em",
+                SCREEN_WIDTH // 2,
+                SCREEN_HEIGHT // 2 + 30,
+                arcade.color.LIGHT_GRAY,
+                24,
+                anchor_x="center",
+                anchor_y="center",
+            )
+            # Instructions
+            arcade.draw_text(
+                "Use READY to toggle your status.\n"
+                "When all players are ready, click START GAME.",
+                SCREEN_WIDTH // 2,
+                SCREEN_HEIGHT // 2 - 40,
+                arcade.color.WHITE,
+                18,
+                anchor_x="center",
+                anchor_y="center",
+                align="center",
+                width=600,
+            )
+
+            arcade.draw_text(self.status_text, 10, 20, arcade.color.WHITE, 16)
+
+            # Draw ready and start buttons
+            self.ui.draw()
+            return
+
         cx, cy = self.table_center_x, self.table_center_y
         arcade.draw_ellipse_filled(cx, cy, self.table_width, self.table_height, arcade.color.CAPUT_MORTUUM)
 
