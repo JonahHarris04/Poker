@@ -1,6 +1,6 @@
 """
 CS 3050 Poker Game - app.py
-Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappas
+Sam Whitcomb, Jonah Harris, Owen Davis, Jake Pappa's
 """
 
 
