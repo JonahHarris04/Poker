@@ -223,7 +223,7 @@ def handle_disconnect(_):
 
 @socketio.on('client_exit')
 def handle_client_exit(_=None):
-    handle_disconnect()
+    handle_disconnect(_)
 
 
 @socketio.on('player_action')
