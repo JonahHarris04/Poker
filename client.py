@@ -25,7 +25,7 @@ def get_screen_resolution():
     root.destroy()
     return width * 0.6, height * 0.6
 
-SCREEN_WIDTH, SCREEN_HEIGHT = 1040, 600
+SCREEN_WIDTH, SCREEN_HEIGHT = 1040, 768
 SCREEN_TITLE = "Poker"
 
 # Constants for sizing
