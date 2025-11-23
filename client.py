@@ -171,7 +171,6 @@ class PokerGameClient(arcade.Window):
         # Used for custom betting
         self.bet_amount_input = None
 
-
     def setup(self):
         self.register_socket_events()
         threading.Thread(target=self.connect_to_server, daemon=True).start()
@@ -291,7 +290,6 @@ class PokerGameClient(arcade.Window):
 
         # Input Text box for betting amounts
         self.bet_amount_input = gui.UIInputText(width=80, text="10")
-
         @self.check_button.event("on_click")
         def _on_check_click(_):
             self.sio.emit("player_action", {"action": "check"})
