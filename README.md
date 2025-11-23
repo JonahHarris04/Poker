@@ -22,3 +22,4 @@
 
 ## Troubleshooting
 - If you cannot connect, make sure app.py is running.
+- If you need to change the window size, you may do so at the top of client.py
